@@ -16,10 +16,12 @@
   const clockEl = document.getElementById('clock');
   const tHar = document.getElementById('t-har');
   const tDel = document.getElementById('t-del');
+  const tLost = document.getElementById('t-lost');
   const tEff = document.getElementById('t-eff');
   const gnow = document.getElementById('gnow');
   const detailsEl = document.getElementById('details');
   const listEl = document.getElementById('list');
+  const costEl = document.getElementById('cost');
   let rowCache = [];
 
   function buildList() {
@@ -63,20 +65,25 @@
     if (!detailsEl) return;
     if (sim.selectedWh) {
       const cap = sim.cfg.battery.capacityWh;
-      const gridW = gridNowW(sim);
+      const sheepW = sheepNowW(sim);
+      const roofW = whNowW(sim);
       const onSite = sim.sheep.filter(s =>
         (s.state === 'resting' || s.state === 'delivering') && Math.hypot(s.x - s.home.x, s.y - s.home.y) < 60).length;
       const stored = sim.sheep.reduce((a, s) => a + s.soc * cap, 0);
       const avgW = sim.totalGridDur > 0 ? sim.totalGridAccum / sim.totalGridDur : 0;
       detailsEl.innerHTML = `
-        <h3>Warehouse &amp; grid</h3>
+        <h3>Warehouse & grid</h3>
         ${statRows([
-          ['grid intake (now)', Math.round(gridW) + ' W', gridW > 0 ? 'good' : ''],
+          ['grid intake (now)', Math.round(sheepW + roofW) + ' W', (sheepW + roofW) > 0 ? 'good' : ''],
+          ['  from herd', Math.round(sheepW) + ' W', sheepW > 0 ? 'good' : ''],
+          ['  from roof PV', Math.round(roofW) + ' W', roofW > 0 ? 'good' : ''],
           ['on site', onSite + ' / ' + sim.sheep.length],
           ['energy in herd', fmtWh(stored)],
           ['total delivered', fmtWh(sim.totals.delivered), 'good'],
-          ['total harvested', fmtWh(sim.totals.harvest)],
-          ['end-to-end efficiency', sim.totals.harvest > 1 ? Math.round(100 * sim.totals.delivered / sim.totals.harvest) + '%' : '-'],
+          ['  of which roof', fmtWh(sim.whDelivered)],
+          ['total produced', fmtWh(sim.totals.produced)],
+          ['total lost', fmtWh(sim.totals.lost)],
+          ['end-to-end efficiency', sim.totals.produced > 1 ? Math.round(100 * sim.totals.delivered / sim.totals.produced) + '%' : '-'],
           ['avg intake since start', Math.round(avgW) + ' W'],
         ])}
         <div class="hint">click a sheep for its live numbers</div>`;
@@ -92,9 +99,11 @@
       <h3>${s.name} - ${STATE_LABEL[s.state]}</h3>
       ${statRows([
         ['PV production (now)', Math.round(pvW) + ' W', pvW > 1 ? 'good' : ''],
+        ['sun exposure', Math.round(s.exposure * 100) + '% (skill ' + Math.round(s.skill * 100) + '%)'],
         ['battery', Math.round(s.soc * 100) + '% (' + Math.round(s.soc * cap) + ' / ' + cap + ' Wh)'],
         ['to grid (now)', outW ? Math.round(outW) + ' W' : '0 W', outW ? 'good' : ''],
         ['motor draw', motorW + ' W'],
+        ['produced today', fmtWh(s.produceToday)],
         ['harvested today', fmtWh(s.harvestToday)],
         ['delivered today', fmtWh(s.deliverToday), 'good'],
       ])}`;
@@ -106,8 +115,9 @@
     clockEl.textContent = `Day ${dayOf(sim.t)} - ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     tHar.textContent = fmtWh(sim.totals.harvest);
     tDel.textContent = fmtWh(sim.totals.delivered);
-    tEff.textContent = sim.totals.harvest > 1 ? Math.round(100 * sim.totals.delivered / sim.totals.harvest) + '%' : '-';
-    gnow.textContent = Math.round(gridNowW(sim));
+    tLost.textContent = fmtWh(sim.totals.lost);
+    tEff.textContent = sim.totals.produced > 1 ? Math.round(100 * sim.totals.delivered / sim.totals.produced) + '%' : '-';
+    gnow.textContent = Math.round(sheepNowW(sim) + whNowW(sim));
   }
 
   function toWorld(e) {
@@ -154,23 +164,52 @@
   const sCount = document.getElementById('s-count');
   const sBatt = document.getElementById('s-batt');
   const sPanel = document.getElementById('s-panel');
+  const sRoof = document.getElementById('s-roof');
   const vCount = document.getElementById('v-count');
   const vBatt = document.getElementById('v-batt');
   const vPanel = document.getElementById('v-panel');
-  sCount.addEventListener('input', () => vCount.textContent = sCount.value);
-  sBatt.addEventListener('input', () => vBatt.textContent = sBatt.value + ' Wh');
-  sPanel.addEventListener('input', () => vPanel.textContent = sPanel.value + ' W');
+  const vRoof = document.getElementById('v-roof');
+
+  function updateCost() {
+    if (!costEl) return;
+    const c = cfg.cost;
+    const n = +sCount.value, batt = +sBatt.value, panelW = +sPanel.value, roof = +sRoof.value;
+    const panels = c.panelGBPperW * panelW * n;
+    const roofC = c.panelGBPperW * roof;
+    const batts = c.batteryGBPperKWh * batt / 1000 * n;
+    const drives = c.driveGBPperSheep * n;
+    const inv = c.inverterGBP;
+    const total = panels + roofC + batts + drives + inv;
+    const kwh = sim.totals.delivered / 1000;
+    costEl.innerHTML = statRows([
+      [`panels ${n} × ${panelW} W`, '£' + Math.round(panels)],
+      [`batteries ${n} × ${batt} Wh`, '£' + Math.round(batts)],
+      [`roof PV ${roof} W`, '£' + Math.round(roofC)],
+      ['motors & wheels', '£' + Math.round(drives)],
+      ['inverter', '£' + Math.round(inv)],
+      ['total cost', '£' + Math.round(total), 'good'],
+      ['per kWh delivered', kwh > 0.01 ? '£' + (total / kwh).toFixed(2) : '-'],
+    ]);
+  }
+
+  sCount.addEventListener('input', () => { vCount.textContent = sCount.value; updateCost(); });
+  sBatt.addEventListener('input', () => { vBatt.textContent = sBatt.value + ' Wh'; updateCost(); });
+  sPanel.addEventListener('input', () => { vPanel.textContent = sPanel.value + ' W'; updateCost(); });
+  sRoof.addEventListener('input', () => { vRoof.textContent = sRoof.value + ' W'; updateCost(); });
 
   document.getElementById('apply').addEventListener('click', () => {
     cfg.sheep.count = +sCount.value;
     cfg.battery.capacityWh = +sBatt.value;
     cfg.panel.peakW = +sPanel.value;
+    cfg.whPanel.peakW = +sRoof.value;
     sim = createSim(cfg);
     sim.selectedWh = false;
     buildList();
     updateList();
     updateDetails();
+    updateCost();
   });
+  updateCost();
 
   setSpeed(10);
 
@@ -178,7 +217,12 @@
     const dtReal = Math.min(0.1, (now - last) / 1000);
     last = now;
     if (speed > 0) advance(sim, dtReal, speed);
-    draw.draw(sim);
+    const roofW = whNowW(sim);
+    const pvW = sim.sheep.reduce((a, s) => a + solarInW(sim, s), 0) + roofW;
+    const gridW = sheepNowW(sim) + roofW;
+    const motorW = sim.sheep.filter(s =>
+      s.state === 'toField' || s.state === 'toWarehouse' || s.state === 'harvesting').length * sim.cfg.motor.powerW;
+    draw.draw(sim, pvW, gridW, motorW);
     draw.drawChart(sim);
     updateHUD();
     slowT += dtReal;

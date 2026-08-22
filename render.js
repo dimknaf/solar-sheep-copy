@@ -33,7 +33,7 @@ function makeDraw() {
     canvas.height = Math.max(1, Math.round(h * dpr));
   }
 
-  function draw(sim) {
+  function draw(sim, pvW, gridW, motorW) {
     const cfg = sim.cfg;
     const S = Math.min(canvas.width / cfg.world.w, canvas.height / cfg.world.h);
     const ox = (canvas.width - cfg.world.w * S) / 2;
@@ -46,7 +46,6 @@ function makeDraw() {
     ctx.setTransform(S, 0, 0, S, ox, oy);
 
     const t = sim.t;
-    const d = t % 86400;
     const sun = sunFactor(t, cfg);
 
     drawField(sim, sun);
@@ -54,15 +53,17 @@ function makeDraw() {
     drawClouds(sim);
     for (const s of sim.sheep) drawSheep(sim, s);
     drawParticles(sim);
+    drawWeatherTint(sim);
     drawTint(sim, sun, t);
     drawSunBadge(sim, sun);
+    drawOverlay(sim, pvW, gridW, motorW);
     ctx.restore();
   }
 
   function drawField(sim, sun) {
     const cfg = sim.cfg;
     const g = ctx.createLinearGradient(0, 0, 0, cfg.world.h);
-    const lit = 0.55 + sun * 0.45;
+    const lit = (0.55 + sun * 0.45) * weatherF(sim);
     g.addColorStop(0, shadeColor('#5d8a45', lit));
     g.addColorStop(1, shadeColor('#4a7a3a', lit));
     ctx.fillStyle = g;
@@ -99,7 +100,16 @@ function makeDraw() {
     ctx.textAlign = 'center';
     ctx.fillText('WAREHOUSE', wh.x + wh.w / 2, wh.y + 31);
 
-    const gridActive = sim.sheep.some(s => s.state === 'delivering');
+    // roof PV strip (separate from the sheep herd)
+    const roofW = whNowW(sim);
+    const roofGlow = Math.min(1, roofW / sim.cfg.whPanel.peakW);
+    ctx.fillStyle = `rgba(43,74,128,${0.5 + roofGlow * 0.5})`;
+    ctx.strokeStyle = `rgba(120,170,255,${0.25 + roofGlow * 0.7})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(wh.x + 12, wh.y + 8, wh.w - 24, 7, 3); ctx.fill();
+    ctx.stroke();
+
+    const gridActive = sim.sheep.some(s => s.state === 'delivering') || roofW > 1;
     const gx = wh.x + wh.w / 2, gy = wh.y + 95;
     ctx.strokeStyle = gridActive ? '#80ed99' : '#5c6b80';
     ctx.lineWidth = 3;
@@ -107,9 +117,12 @@ function makeDraw() {
     ctx.font = '600 15px system-ui';
     ctx.fillStyle = gridActive ? '#80ed99' : '#8fa0b5';
     ctx.fillText('GRID INTAKE', gx, gy + 58);
-    const wNow = gridNowW(sim);
+    const wNow = sheepNowW(sim) + roofW;
     ctx.font = '700 24px system-ui';
     ctx.fillText(wNow > 0.5 ? Math.round(wNow) + ' W' : 'idle', gx, gy + 88);
+    ctx.font = '600 12px system-ui';
+    ctx.fillStyle = roofW > 0.5 ? '#7aa2ff' : '#5c6b80';
+    ctx.fillText('roof ' + Math.round(roofW) + ' W', gx, gy + 108);
 
     const n = sim.cfg.sheep.count;
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
@@ -151,11 +164,25 @@ function makeDraw() {
 
   function drawSheep(sim, s) {
     const sel = sim.selected === s.id;
+    const sun = sunFactor(sim.t, sim.cfg);
+    const shade = shadeAt(sim, s.x, s.y);
+    const glowAmt = Math.min(1, sun * shade * s.exposure * weatherF(sim)) * (s.state === 'harvesting' || s.state === 'toField' ? 1 : 0.25);
+
     ctx.save();
     ctx.translate(s.x, s.y);
 
+    // ground shadow stays unrotated
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath(); ctx.ellipse(2, 6, 24, 18, 0, 0, Math.PI * 2); ctx.fill();
+
+    ctx.save();
+    ctx.rotate(s.orient);
+
+    // nose wedge marks which way the panels face
+    ctx.fillStyle = '#c9c0ae';
+    ctx.beginPath();
+    ctx.moveTo(-30, -5); ctx.lineTo(-40, 0); ctx.lineTo(-30, 5);
+    ctx.closePath(); ctx.fill();
 
     const wheelPulse = 1 + Math.sin(sim.t * 14 + s.id) * 0.06;
     ctx.fillStyle = '#14181f';
@@ -181,9 +208,6 @@ function makeDraw() {
       ctx.setLineDash([]);
     }
 
-    const sun = sunFactor(sim.t, sim.cfg);
-    const shade = shadeAt(sim, s.x, s.y);
-    const glowAmt = Math.min(1, sun * shade) * (s.state === 'harvesting' || s.state === 'toField' ? 1 : 0.25);
     ctx.fillStyle = `rgba(43,74,128,${0.55 + glowAmt * 0.35})`;
     ctx.strokeStyle = `rgba(120,170,255,${0.25 + glowAmt * 0.6})`;
     ctx.lineWidth = 1.5;
@@ -195,6 +219,8 @@ function makeDraw() {
     ctx.moveTo(-6, -8); ctx.lineTo(-6, 8);
     ctx.moveTo(6, -8); ctx.lineTo(6, 8);
     ctx.stroke();
+
+    ctx.restore(); // unrotate for upright labels
 
     const bw = 56, bh = 7;
     ctx.fillStyle = 'rgba(10,14,20,0.75)';
@@ -214,7 +240,7 @@ function makeDraw() {
     const outW = (s.state === 'delivering' && (s.soc - sim.cfg.battery.reserveSoc) * sim.cfg.battery.capacityWh > 0.01) ? sim.cfg.grid.dischargeW : 0;
     ctx.font = '600 11px system-ui';
     ctx.fillStyle = `rgba(150,210,255,${0.75 + glowAmt * 0.25})`;
-    ctx.fillText(`PV ${Math.round(pvW)} W   ${Math.round(s.soc * 100)}%${outW ? `   grid ${Math.round(outW)} W` : ''}`, 0, -56);
+    ctx.fillText(`PV ${Math.round(pvW)} W   ${Math.round(s.soc * 100)}%   face ${Math.round(s.exposure * 100)}%${outW ? `   grid ${Math.round(outW)} W` : ''}`, 0, -56);
     ctx.restore();
   }
 
@@ -236,16 +262,25 @@ function makeDraw() {
     }
   }
 
+  function drawWeatherTint(sim) {
+    const f = weatherF(sim);
+    if (f >= 0.95) return;
+    ctx.fillStyle = `rgba(150,160,175,${(1 - f) * 0.16})`;
+    ctx.fillRect(0, 0, sim.cfg.world.w, sim.cfg.world.h);
+  }
+
   function drawTint(sim, sun, t) {
     const d = t % 86400;
     const cfg = sim.cfg;
-    let col = 'rgba(0,0,0,0)';
     let a = 0;
-    if (d < cfg.sunrise) { a = 0.55; col = `rgba(30,40,80,${a})`; }
-    else if (d < cfg.sunrise + 2 * 3600) { const k = (d - cfg.sunrise) / (2 * 3600); a = 0.4 * (1 - k); col = `rgba(255,140,60,${a})`; }
-    else if (d > cfg.sunset - 2 * 3600 && d < cfg.sunset) { const k = 1 - (cfg.sunset - d) / (2 * 3600); a = 0.4 * k; col = `rgba(255,120,50,${a})`; }
-    else if (d >= cfg.sunset) { a = 0.62; col = `rgba(8,12,30,${a})`; }
-    ctx.fillStyle = col;
+    if (d < cfg.sunrise) { a = 0.55; }
+    else if (d < cfg.sunrise + 2 * 3600) { a = 0.4 * (1 - (d - cfg.sunrise) / (2 * 3600)); }
+    else if (d > cfg.sunset - 2 * 3600 && d < cfg.sunset) { a = 0.4 * (1 - (cfg.sunset - d) / (2 * 3600)); }
+    else if (d >= cfg.sunset) { a = 0.62; }
+    if (a <= 0) return;
+    // night / pre-dawn dark blue, dawn & dusk orange
+    const col = d < cfg.sunrise ? '30,40,80' : (d >= cfg.sunset ? '8,12,30' : '255,140,60');
+    ctx.fillStyle = `rgba(${col},${a})`;
     ctx.fillRect(0, 0, sim.cfg.world.w, sim.cfg.world.h);
   }
 
@@ -273,6 +308,62 @@ function makeDraw() {
       ctx.fillStyle = 'rgba(20,28,52,0.9)';
       ctx.beginPath(); ctx.arc(1174, 56, 10, 0, Math.PI * 2); ctx.fill();
     }
+    ctx.restore();
+  }
+
+  function costOf(sim) {
+    const c = sim.cfg.cost;
+    const n = sim.cfg.sheep.count;
+    const gbp = c.panelGBPperW * sim.cfg.panel.peakW * n
+      + c.batteryGBPperKWh * sim.cfg.battery.capacityWh / 1000 * n
+      + sim.cfg.whPanel.peakW * c.panelGBPperW
+      + c.driveGBPperSheep * n
+      + c.inverterGBP;
+    const kwh = sim.totals.delivered / 1000;
+    return { gbp, perKWh: kwh > 0.01 ? gbp / kwh : null };
+  }
+
+  function drawOverlay(sim, pvW, gridW, motorW) {
+    const cfg = sim.cfg;
+    const rows = [
+      ['PV now', Math.round(pvW) + ' W', '#7aa2ff'],
+      ['grid now', Math.round(gridW) + ' W', '#80ed99'],
+      ['motor', Math.round(motorW) + ' W', '#ff9f68'],
+      ['in herd', fmtWh(sim.sheep.reduce((a, s) => a + s.soc * cfg.battery.capacityWh, 0)), '#e8ecf2'],
+      ['produced', fmtWh(sim.totals.produced), '#e8ecf2'],
+      ['lost', fmtWh(sim.totals.lost), '#ff6b6b'],
+      ['today', fmtWh(sim.daily.delivered) + ' to grid', '#80ed99'],
+      ['cost', '£' + Math.round(costOf(sim).gbp), '#ffd166'],
+    ];
+    const w = 236, rh = 20, pad = 12;
+    const h = pad * 2 + 22 + rows.length * rh + 8;
+    const x0 = cfg.world.w - w - 16, y0 = cfg.world.h - h - 16;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(13,19,32,0.84)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(x0, y0, w, h, 12); ctx.fill(); ctx.stroke();
+
+    ctx.font = '700 13px system-ui';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText('LIVE METRICS', x0 + pad, y0 + pad + 10);
+    ctx.fillStyle = WEATHER_COLOR[sim.weather.state];
+    ctx.textAlign = 'right';
+    ctx.fillText(WEATHER_LABEL[sim.weather.state], x0 + w - pad, y0 + pad + 10);
+
+    rows.forEach((r, i) => {
+      const yy = y0 + pad + 30 + i * rh;
+      ctx.textAlign = 'left';
+      ctx.font = '500 12.5px system-ui';
+      ctx.fillStyle = '#8fa0b5';
+      ctx.fillText(r[0], x0 + pad, yy);
+      ctx.textAlign = 'right';
+      ctx.font = '600 12.5px system-ui';
+      ctx.fillStyle = r[2];
+      ctx.fillText(r[1], x0 + w - pad, yy);
+    });
     ctx.restore();
   }
 
@@ -310,7 +401,9 @@ function makeDraw() {
     }
 
     let maxW = 1;
-    for (const h of sim.history) maxW = Math.max(maxW, h.accum / Math.max(0.01, h.dur));
+    for (const h of sim.history) {
+      maxW = Math.max(maxW, h.sAcc / Math.max(0.01, h.dur), h.rAcc / Math.max(0.01, h.dur));
+    }
     maxW *= 1.1;
 
     cc.strokeStyle = 'rgba(255,255,255,0.06)';
@@ -319,11 +412,15 @@ function makeDraw() {
       cc.beginPath(); cc.moveTo(0, H * yy); cc.lineTo(W, H * yy); cc.stroke();
     }
 
+    const xOf = b => ((b - startB) / span) * W;
+    const yOf = p => H - 20 - (p / maxW) * (H - 32);
+
+    // sheep series (green)
     cc.beginPath();
     let started = false;
     for (const h of sim.history) {
-      const x = ((h.b - startB) / span) * W;
-      const y = H - 6 - (h.accum / Math.max(0.01, h.dur) / maxW) * (H - 14);
+      const x = xOf(h.b);
+      const y = yOf(h.sAcc / Math.max(0.01, h.dur));
       if (x < 0) continue;
       if (!started) { cc.moveTo(x, y); started = true; }
       else cc.lineTo(x, y);
@@ -331,18 +428,37 @@ function makeDraw() {
     cc.strokeStyle = '#80ed99';
     cc.lineWidth = 2;
     cc.stroke();
-    cc.lineTo(W, H); cc.lineTo(0, H);
+    cc.lineTo(W, H - 16); cc.lineTo(0, H - 16);
     cc.closePath();
-    cc.fillStyle = 'rgba(128,237,153,0.12)';
+    cc.fillStyle = 'rgba(128,237,153,0.10)';
     cc.fill();
+
+    // roof series (amber)
+    cc.beginPath();
+    started = false;
+    for (const h of sim.history) {
+      const x = xOf(h.b);
+      const y = yOf(h.rAcc / Math.max(0.01, h.dur));
+      if (x < 0) continue;
+      if (!started) { cc.moveTo(x, y); started = true; }
+      else cc.lineTo(x, y);
+    }
+    cc.strokeStyle = '#ffd166';
+    cc.lineWidth = 1.5;
+    cc.stroke();
 
     cc.font = '10px system-ui';
     cc.fillStyle = 'rgba(255,255,255,0.35)';
+    cc.textAlign = 'left';
     cc.fillText('-24h', 4, H - 4);
+    cc.fillStyle = '#80ed99';
+    cc.fillText('sheep', 34, H - 4);
+    cc.fillStyle = '#ffd166';
+    cc.fillText('roof', 70, H - 4);
     cc.textAlign = 'right';
+    cc.fillStyle = 'rgba(255,255,255,0.35)';
     cc.fillText('now', W - 4, H - 4);
     cc.fillText(Math.round(maxW / 1.1) + 'W', W - 4, 10);
-    cc.textAlign = 'left';
   }
 
   return { setup, resize, draw, drawChart };

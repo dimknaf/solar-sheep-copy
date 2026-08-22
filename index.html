@@ -85,6 +85,7 @@ kbd { background: #1b2331; border: 1px solid #2a3547; border-radius: 4px; paddin
   <div class="clock" id="clock">Day 1 - 06:30</div>
   <div class="speed">
     <button class="spd" data-speed="0" title="pause">pause</button>
+    <button class="spd" data-speed="0.5">0.5x</button>
     <button class="spd" data-speed="1">1x</button>
     <button class="spd" data-speed="10">10x</button>
     <button class="spd" data-speed="30">30x</button>
@@ -94,6 +95,7 @@ kbd { background: #1b2331; border: 1px solid #2a3547; border-radius: 4px; paddin
   <div class="totals">
     <span>harvested <b id="t-har">0 Wh</b></span>
     <span>to grid <b id="t-del">0 Wh</b></span>
+    <span>lost <b id="t-lost" style="color:#ff6b6b">0 Wh</b></span>
     <span>eff <b id="t-eff">-</b></span>
   </div>
 </header>
@@ -112,10 +114,13 @@ kbd { background: #1b2331; border: 1px solid #2a3547; border-radius: 4px; paddin
     <section id="details"></section>
     <section>
       <h3>Tuning</h3>
-      <label>sheep <input type="range" id="s-count" min="1" max="12" step="1" value="5"><span id="v-count">5</span></label>
-      <label>battery <input type="range" id="s-batt" min="100" max="2000" step="50" value="500"><span id="v-batt">500 Wh</span></label>
-      <label>panel <input type="range" id="s-panel" min="50" max="600" step="10" value="200"><span id="v-panel">200 W</span></label>
-      <button class="primary" id="apply">Apply and restart sim</button>
+  <label>sheep <input type="range" id="s-count" min="1" max="12" step="1" value="5"><span id="v-count">5</span></label>
+  <label>battery <input type="range" id="s-batt" min="100" max="2000" step="50" value="500"><span id="v-batt">500 Wh</span></label>
+  <label>panel <input type="range" id="s-panel" min="50" max="600" step="10" value="200"><span id="v-panel">200 W</span></label>
+  <label>roof PV <input type="range" id="s-roof" min="0" max="1000" step="10" value="300"><span id="v-roof">300 W</span></label>
+  <button class="primary" id="apply">Apply and restart sim</button>
+  <h3 style="margin-top:14px">Cost estimate</h3>
+  <div id="cost"></div>
     </section>
     <footer>click a sheep (or the warehouse) for live details &middot; <kbd>space</kbd> pause/resume</footer>
   </aside>

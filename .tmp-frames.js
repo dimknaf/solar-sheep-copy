@@ -37,6 +37,7 @@ function getEl(id) {
     if (id === 's-count') els[id].value = '5';
     if (id === 's-batt') els[id].value = '500';
     if (id === 's-panel') els[id].value = '200';
+    if (id === 's-roof') els[id].value = '300';
   }
   return els[id];
 }
@@ -47,7 +48,7 @@ const sandbox = {
   document: {
     getElementById: getEl,
     createElement: (t) => makeEl(t),
-    querySelectorAll: () => ['0', '1', '10', '30', '100'].map((s) => ({ dataset: { speed: s }, classList: { toggle() {} }, addEventListener() {} })),
+    querySelectorAll: () => ['0', '0.5', '1', '10', '30', '100'].map((s) => ({ dataset: { speed: s }, classList: { toggle() {} }, addEventListener() {} })),
     addEventListener() {},
     body: {},
   },
@@ -79,7 +80,14 @@ for (let i = 0; i < 3000; i++) {
 const h = Math.floor((sim.t % 86400) / 3600), m = Math.floor((sim.t % 3600) / 60);
 const dT = ((sim.t - t0) / 60).toFixed(0);
 console.log(`clock after 3000 frames: Day ${Math.floor(sim.t / 86400) + 1} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}  (advanced ${dT} sim-min)`);
+console.log('weather:', sim.weather.state, 'clouds:', sim.clouds.length);
 console.log('states:', sim.sheep.map(s => `${s.name}:${s.state}`).join(' '));
 console.log('soc   :', sim.sheep.map(s => s.soc.toFixed(2)).join(' '));
+console.log('orient:', sim.sheep.map(s => s.orient.toFixed(2)).join(' '));
+const T = sim.totals;
+const inHerd = sim.sheep.reduce((a, s) => a + s.soc * sim.cfg.battery.capacityWh, 0);
+const reserve0 = sim.sheep.length * sim.cfg.battery.reserveSoc * sim.cfg.battery.capacityWh; // unproduced initial reserve
+console.log(`totals: produced=${T.produced.toFixed(1)} delivered=${T.delivered.toFixed(1)} lost=${T.lost.toFixed(1)} inHerd=${inHerd.toFixed(1)} drift=${(T.produced - T.delivered - T.lost - (inHerd - reserve0)).toFixed(2)}Wh`);
+if (Math.abs(T.produced - T.delivered - T.lost - (inHerd - reserve0)) > 1) { console.log('FAIL: energy balance drift > 1 Wh'); process.exit(1); }
 if (sim.t - t0 < 300) { console.log('FAIL: sim barely advances - freeze'); process.exit(1); }
 console.log('FRAME LOOP OK');
