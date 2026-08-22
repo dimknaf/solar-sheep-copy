@@ -34,15 +34,21 @@ function sunPos(t, cfg) {
 
 function createSim(cfg) {
   const wh = cfg.warehouse;
+  const plant = cfg.plant;
   const dockX = wh.x + wh.w + 52;
   const n = cfg.sheep.count;
 
+  // one dock pad at the warehouse's right wall (queue forms along it, heading
+  // north); the conveyor runs from the dock to the plant's intake port
+  const dockPos = { x: wh.x + wh.w + 20, y: wh.y + wh.h / 2 };
+  const queuePt = i => ({ x: dockPos.x + 8, y: dockPos.y - i * 46 });
+  const lineX0 = dockPos.x - 6, lineY0 = dockPos.y;
+  const lineX1 = plant.x + plant.w + 14, lineY1 = plant.y + 62;
+
   const slots = [];
   const colW = (cfg.world.w - dockX - 80) / 3;
-  let maxRow = 0;
   for (let i = 0; i < n; i++) {
     const col = i % 3, row = Math.floor(i / 3);
-    maxRow = Math.max(maxRow, row);
     slots.push({
       x: dockX + 140 + col * (colW - 70) + (row % 2 ? 80 : 0),
       y: 150 + row * 220 + (col % 2 ? 60 : 0),
@@ -52,11 +58,14 @@ function createSim(cfg) {
   const sim = {
     cfg, t: (cfg.startDay - 1) * DAY + cfg.startHour * 3600,
     sheep: [], clouds: [], parts: [],
+    pool: [], units: [], line: [], ready: [],
+    dock: { queue: [], current: null, timer: 0 },
+    dockPos, queuePt, lineX0, lineY0, lineX1, lineY1,
     history: [],
     totalGridAccum: 0, totalGridDur: 0,
     totals: { harvest: 0, delivered: 0, lost: 0, produced: 0 },
     daily: { produced: 0, harvest: 0, delivered: 0, lost: 0 },
-    whDelivered: 0,
+    whDelivered: 0, plantDelivered: 0,
     weather: { state: 'clear', left: 0 },
     selected: null,
   };
@@ -73,7 +82,7 @@ function createSim(cfg) {
       x: dockX, y: homeY,
       home: { x: dockX, y: homeY },
       slot: slots[i], state: 'resting',
-      soc: cfg.battery.reserveSoc,
+      pack: null,   // a member of sim.pool, state 'carry'
       wander: null,
       wake: rng() * cfg.sheep.wakeSpreadSec,
       recall: cfg.recallTime + (rng() * 2 - 1) * cfg.sheep.recallJitterSec,
@@ -85,6 +94,22 @@ function createSim(cfg) {
       lastDay: 1,
     });
   }
+
+  // battery pool: the whole fleet of packs; the first n start on a sheep (as the
+  // unproduced initial reserve), the rest start empty and wait on the ready rack
+  for (let i = 0; i < cfg.dock.pool; i++) {
+    sim.pool.push({ id: i, soc: 0, state: 'ready' });
+  }
+  for (let u = 0; u < cfg.dock.units; u++) sim.units.push({ p: null });
+  for (let i = 0; i < n; i++) {
+    const p = sim.pool[i];
+    p.soc = cfg.battery.reserveSoc;
+    p.state = 'carry';
+    sim.sheep[i].pack = p;
+  }
+  // the remaining packs wait on the ready rack
+  for (let i = n; i < cfg.dock.pool; i++) sim.ready.push(sim.pool[i]);
+
   for (let i = 0; i < cfg.clouds.count; i++) {
     sim.clouds.push({
       x: rng() * (cfg.world.w + 600) - 300,
@@ -126,6 +151,27 @@ function whNowW(sim) {
   return sim.cfg.whPanel.peakW * sunFactor(sim.t, sim.cfg) * weatherF(sim);
 }
 
+// live discharge rate of one plant unit (0 while empty / at the reserve floor)
+function unitNowW(sim, u) {
+  if (!u.p) return 0;
+  const cap = sim.cfg.battery.capacityWh;
+  return u.p.soc * cap > cap * sim.cfg.battery.reserveSoc + 0.01
+    ? sim.cfg.grid.dischargeW : 0;
+}
+function plantNowW(sim) {
+  let w = 0;
+  for (const u of sim.units) w += unitNowW(sim, u);
+  return w;
+}
+
+// Wh currently stored in the whole pool (carried, on the line, in units, on racks)
+function poolStoredWh(sim) {
+  const cap = sim.cfg.battery.capacityWh;
+  let w = 0;
+  for (const p of sim.pool) w += p.soc * cap;
+  return w;
+}
+
 function spawnGlow(sim, x, y) {
   sim.parts.push({ x, y, age: 0, max: 0.7 + Math.random() * 0.4 });
 }
@@ -156,14 +202,71 @@ function driveSim(sim, s, pt, speed, dt) {
   s.y += dy / d * stepLen;
   const cap = sim.cfg.battery.capacityWh;
   const dtH = dt / 3600;
-  const availWh = s.soc * cap - cap * sim.cfg.battery.reserveSoc;
+  const availWh = s.pack.soc * cap - cap * sim.cfg.battery.reserveSoc;
   const useW = Math.min(sim.cfg.motor.powerW, availWh / sim.cfg.battery.dischargeEff / dtH);
   if (useW > 0) {
-    s.soc = Math.max(sim.cfg.battery.reserveSoc, s.soc - (useW * dtH) / (sim.cfg.battery.dischargeEff * cap));
-    sim.totals.lost += useW * dtH;
-    sim.daily.lost += useW * dtH;
+    // motor burn is booked exactly as the Wh it pulls out of the pack
+    const burnWh = useW * dtH / sim.cfg.battery.dischargeEff;
+    s.pack.soc = Math.max(sim.cfg.battery.reserveSoc, s.pack.soc - burnWh / cap);
+    sim.totals.lost += burnWh;
+    sim.daily.lost += burnWh;
   }
   return d <= stepLen + 0.01;
+}
+
+function stepPlant(sim, dt) {
+  const cfg = sim.cfg;
+  const dtH = dt / 3600;
+  const cap = cfg.battery.capacityWh;
+  const reserveSoc = cfg.battery.reserveSoc;
+  let gridNow = 0;
+
+  // conveyor: packs ride in order, oldest first; on arrival join the ready queue
+  for (const m of sim.line) m.t += dt;
+  const done = sim.line.filter(m => m.t >= cfg.dock.lineSec);
+  if (done.length) {
+    sim.line = sim.line.filter(m => m.t < cfg.dock.lineSec);
+    for (const m of done) {
+      m.state = 'ready';
+      sim.ready.push(m);
+    }
+  }
+
+  // assign charged packs from the ready rack to free discharge units (FIFO).
+  // Empty packs stay on the rack, waiting for a sheep to carry them out.
+  for (const u of sim.units) {
+    if (u.p) continue;
+    const idx = sim.ready.findIndex(p => p.soc > reserveSoc + 1e-9);
+    if (idx === -1) break;
+    const p = sim.ready.splice(idx, 1)[0];
+    p.state = 'discharging';
+    u.p = p;
+  }
+
+  // discharge into the grid; a pack that hits the reserve floor goes back to ready
+  for (const u of sim.units) {
+    const p = u.p;
+    if (!p) continue;
+    const availWh = p.soc * cap - cap * reserveSoc;
+    if (availWh > 0) {
+      const outWh = Math.min(cfg.grid.dischargeW * dtH, availWh / cfg.battery.dischargeEff);
+      const lossWh = outWh * (1 / cfg.battery.dischargeEff - 1);
+      p.soc = (p.soc * cap - outWh / cfg.battery.dischargeEff) / cap;
+      sim.totals.delivered += outWh;
+      sim.totals.lost += lossWh;
+      sim.daily.delivered += outWh;
+      sim.daily.lost += lossWh;
+      sim.plantDelivered += outWh;
+      gridNow += outWh / dtH;
+    }
+    if (p.soc <= reserveSoc + 1e-9 && p.state === 'discharging') {
+      p.state = 'ready';
+      u.p = null;
+      sim.ready.push(p);
+    }
+  }
+
+  return gridNow;
 }
 
 function stepSim(sim, dt) {
@@ -239,7 +342,7 @@ function stepSim(sim, dt) {
 
       case 'toField': {
         const arrived = driveSim(sim, s, s.slot, cfg.motor.travelSpeed, dt);
-        if (sun === 0) s.state = 'toWarehouse';
+        if (sun === 0) s.state = 'toDock';
         else if (arrived) { s.state = 'harvesting'; pickWander(sim, s); }
         break;
       }
@@ -247,11 +350,11 @@ function stepSim(sim, dt) {
       case 'harvesting': {
         const shade = shadeAt(sim, s.x, s.y);
         const gainW = cfg.panel.peakW * sun * shade * s.exposure * wf;
-        const availWh = cap - s.soc * cap;
+        const availWh = cap - s.pack.soc * cap;
         const chargeInW = (gainW - cfg.motor.powerW) * cfg.battery.chargeEff;
         const chargedW = Math.min(Math.max(0, chargeInW), availWh / dtH);
-        // chargedWh + losses must exactly equal gainWh * dtH
-        const lossWh = (gainW - chargedW / cfg.battery.chargeEff) * dtH;
+        // everything produced but not stored (motor + charge loss + clipping)
+        const lossWh = (gainW * dtH) - (chargedW * dtH);
 
         sim.totals.produced += gainW * dtH;
         sim.daily.produced += gainW * dtH;
@@ -270,7 +373,7 @@ function stepSim(sim, dt) {
         clampWorld(sim, s);
 
         if (chargedW > 0) {
-          s.soc += (chargedW * dtH) / cap;
+          s.pack.soc += (chargedW * dtH) / cap;
           sim.totals.harvest += chargedW * dtH;
           sim.daily.harvest += chargedW * dtH;
           s.harvestToday += chargedW * dtH;
@@ -278,37 +381,67 @@ function stepSim(sim, dt) {
         }
         if (lossWh > 0) { sim.totals.lost += lossWh; sim.daily.lost += lossWh; }
 
-        if (s.soc >= cfg.fullThreshold || d >= s.recall) s.state = 'toWarehouse';
+        if (s.pack.soc >= cfg.fullThreshold || d >= s.recall) s.state = 'toDock';
         break;
       }
 
-      case 'toWarehouse': {
-        const arrived = driveSim(sim, s, s.home, cfg.motor.travelSpeed, dt);
-        if (arrived) { s.state = 'delivering'; s.x = s.home.x; s.y = s.home.y; }
+      case 'toDock': {
+        const arrived = driveSim(sim, s, sim.dockPos, cfg.motor.travelSpeed, dt);
+        if (arrived) { s.state = 'queuing'; s.x = sim.dockPos.x; s.y = sim.dockPos.y; }
         break;
       }
 
-      case 'delivering': {
-        const availWh = s.soc * cap - cap * reserveSoc;
-        if (availWh <= 0.01) {
-          s.state = (d >= s.recall) ? 'resting' : 'toField';
-          break;
+      case 'queuing': {
+        const i = sim.dock.queue.indexOf(s);
+        if (i === -1) { sim.dock.queue.push(s); }
+        else if (i === 0 && !sim.dock.current && sim.ready.some(p => p.soc <= reserveSoc + 1e-9)) {
+          // only start a swap when an empty pack is waiting — otherwise hold the berth
+          s.x = sim.dockPos.x; s.y = sim.dockPos.y;
+          s.state = 'swapping';
+          sim.dock.current = s;
+          sim.dock.timer = 0;
+          if (Math.random() < dtMin * 1.5) spawnSpark(sim, s.x, s.y);
+        } else if (i > 0) {
+          const q = sim.queuePt(i);
+          s.x += (q.x - s.x) * Math.min(1, 6 * dt);
+          s.y += (q.y - s.y) * Math.min(1, 6 * dt);
         }
-        const useW = Math.min(cfg.grid.dischargeW, availWh / dtH);
-        const outWh = useW * dtH;
-        const lossWh = outWh * (1 / cfg.battery.dischargeEff - 1);
-        gridNow += useW;
-        s.soc = (s.soc * cap - outWh / cfg.battery.dischargeEff) / cap;
-        sim.totals.delivered += outWh;
-        sim.totals.lost += lossWh;
-        sim.daily.delivered += outWh;
-        sim.daily.lost += lossWh;
-        s.deliverToday += outWh;
-        if (Math.random() < dtMin * 1.2) spawnGlow(sim, s.x, s.y);
+        break;
+      }
+
+      case 'swapping': {
+        sim.dock.timer += dt;
+        if (Math.random() < dtMin * 0.4) spawnSpark(sim, s.x, s.y);
+        if (sim.dock.timer >= cfg.dock.swapSec) {
+          sim.dock.current = null;
+          sim.dock.queue.shift();
+          // the old pack rides the conveyor into the plant…
+          const oldP = s.pack;
+          oldP.state = 'line';
+          oldP.t = 0;
+          sim.line.push(oldP);
+          // …and the sheep takes an empty one back out with it
+          const idx = sim.ready.findIndex(p => p.soc <= reserveSoc + 1e-9);
+          if (idx !== -1) {
+            const fresh = sim.ready.splice(idx, 1)[0];
+            fresh.state = 'carry';
+            s.pack = fresh;
+          } else {
+            // no empty left (shouldn't happen - checked when the swap started)
+            sim.line.pop();
+            oldP.state = 'carry';
+          }
+          s.state = (sun > 0 && d < s.recall) ? 'toField' : 'resting';
+          if (s.state === 'toField') pickWander(sim, s);
+        }
         break;
       }
     }
   }
+
+  // ---- battery plant: conveyor + discharge units (runs day and night)
+  const plantW = stepPlant(sim, dt);
+  gridNow += plantW;
 
   // ---- warehouse roof PV: fixed panel, straight to the grid
   const roofW = whNowW(sim);
@@ -352,20 +485,13 @@ function advance(sim, realSec, speed) {
 }
 
 function sheepNowW(sim) {
-  let w = 0;
-  const cap = sim.cfg.battery.capacityWh;
-  for (const s of sim.sheep) {
-    if (s.state === 'delivering') {
-      const availWh = s.soc * cap - cap * sim.cfg.battery.reserveSoc;
-      if (availWh > 0) w += sim.cfg.grid.dischargeW;
-    }
-  }
-  return w;
+  // kept as a no-op alias — the herd no longer discharges directly
+  return 0;
 }
 
-// legacy alias (excludes roof PV)
+// grid output now = plant discharge units + roof PV
 function gridNowW(sim) {
-  return sheepNowW(sim);
+  return plantNowW(sim) + whNowW(sim);
 }
 
 function fmtWh(w) {

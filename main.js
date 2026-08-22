@@ -49,10 +49,10 @@
       row.querySelector('.name').textContent = s.name;
       row.querySelector('.st').textContent = STATE_LABEL[s.state];
       const bar = row.querySelector('.bar i');
-      const frac = (s.soc - sim.cfg.battery.reserveSoc) / (1 - sim.cfg.battery.reserveSoc);
+      const frac = (s.pack.soc - sim.cfg.battery.reserveSoc) / (1 - sim.cfg.battery.reserveSoc);
       bar.style.width = (Math.max(0, Math.min(1, frac)) * 100) + '%';
-      bar.style.background = s.soc > 0.35 ? '#80ed99' : (s.soc > 0.15 ? '#ffd166' : '#ff6b6b');
-      row.querySelector('.wh').textContent = fmtWh(s.deliverToday);
+      bar.style.background = s.pack.soc > 0.35 ? '#80ed99' : (s.pack.soc > 0.15 ? '#ffd166' : '#ff6b6b');
+      row.querySelector('.wh').textContent = fmtWh(s.harvestToday);
     });
   }
 
@@ -63,22 +63,40 @@
 
   function updateDetails() {
     if (!detailsEl) return;
-    if (sim.selectedWh) {
-      const cap = sim.cfg.battery.capacityWh;
-      const sheepW = sheepNowW(sim);
+    if (sim.selectedWh === 'plant') {
+      const plantW = plantNowW(sim);
+      const active = sim.units.filter(u => unitNowW(sim, u) > 0).length;
+      detailsEl.innerHTML = `
+        <h3>Battery plant</h3>
+        ${statRows([
+          ['discharge now', Math.round(plantW) + ' W', plantW > 0 ? 'good' : ''],
+          ['units busy', active + ' / ' + sim.units.length],
+          ['on the line', sim.line.length],
+          ['ready rack (empty)', sim.ready.length],
+          ['dock queue', sim.dock.queue.length + (sim.dock.current ? ' + 1 swapping' : '')],
+          ['energy in pool', fmtWh(poolStoredWh(sim))],
+          ['delivered by plant', fmtWh(sim.plantDelivered), 'good'],
+          ['delivered by roof PV', fmtWh(sim.whDelivered)],
+          ['total to grid', fmtWh(sim.totals.delivered), 'good'],
+        ])}
+        <div class="hint">packs: dock swap -> conveyor -> discharge -> ready rack</div>`;
+      return;
+    }
+    if (sim.selectedWh === 'warehouse') {
+      const plantW = plantNowW(sim);
       const roofW = whNowW(sim);
       const onSite = sim.sheep.filter(s =>
-        (s.state === 'resting' || s.state === 'delivering') && Math.hypot(s.x - s.home.x, s.y - s.home.y) < 60).length;
-      const stored = sim.sheep.reduce((a, s) => a + s.soc * cap, 0);
+        (s.state === 'resting' || s.state === 'queuing' || s.state === 'swapping') && Math.hypot(s.x - s.home.x, s.y - s.home.y) < 80).length;
+      const stored = sim.sheep.reduce((a, s) => a + s.pack.soc * sim.cfg.battery.capacityWh, 0);
       const avgW = sim.totalGridDur > 0 ? sim.totalGridAccum / sim.totalGridDur : 0;
       detailsEl.innerHTML = `
         <h3>Warehouse & grid</h3>
         ${statRows([
-          ['grid intake (now)', Math.round(sheepW + roofW) + ' W', (sheepW + roofW) > 0 ? 'good' : ''],
-          ['  from herd', Math.round(sheepW) + ' W', sheepW > 0 ? 'good' : ''],
+          ['grid intake (now)', Math.round(plantW + roofW) + ' W', (plantW + roofW) > 0 ? 'good' : ''],
+          ['  from battery plant', Math.round(plantW) + ' W', plantW > 0 ? 'good' : ''],
           ['  from roof PV', Math.round(roofW) + ' W', roofW > 0 ? 'good' : ''],
           ['on site', onSite + ' / ' + sim.sheep.length],
-          ['energy in herd', fmtWh(stored)],
+          ['energy carried', fmtWh(stored)],
           ['total delivered', fmtWh(sim.totals.delivered), 'good'],
           ['  of which roof', fmtWh(sim.whDelivered)],
           ['total produced', fmtWh(sim.totals.produced)],
@@ -86,26 +104,24 @@
           ['end-to-end efficiency', sim.totals.produced > 1 ? Math.round(100 * sim.totals.delivered / sim.totals.produced) + '%' : '-'],
           ['avg intake since start', Math.round(avgW) + ' W'],
         ])}
-        <div class="hint">click a sheep for its live numbers</div>`;
+        <div class="hint">click the battery plant for its live numbers</div>`;
       return;
     }
     const s = sim.sheep.find(x => x.id === sim.selected);
     if (!s) { detailsEl.innerHTML = ''; return; }
     const cap = sim.cfg.battery.capacityWh;
     const pvW = solarInW(sim, s);
-    const outW = (s.state === 'delivering' && (s.soc - sim.cfg.battery.reserveSoc) * cap > 0.01) ? sim.cfg.grid.dischargeW : 0;
-    const motorW = (s.state === 'toField' || s.state === 'toWarehouse' || s.state === 'harvesting') ? sim.cfg.motor.powerW : 0;
+    const motorW = (s.state === 'toField' || s.state === 'toDock' || s.state === 'harvesting') ? sim.cfg.motor.powerW : 0;
     detailsEl.innerHTML = `
       <h3>${s.name} - ${STATE_LABEL[s.state]}</h3>
       ${statRows([
         ['PV production (now)', Math.round(pvW) + ' W', pvW > 1 ? 'good' : ''],
         ['sun exposure', Math.round(s.exposure * 100) + '% (skill ' + Math.round(s.skill * 100) + '%)'],
-        ['battery', Math.round(s.soc * 100) + '% (' + Math.round(s.soc * cap) + ' / ' + cap + ' Wh)'],
-        ['to grid (now)', outW ? Math.round(outW) + ' W' : '0 W', outW ? 'good' : ''],
+        ['battery', Math.round(s.pack.soc * 100) + '% (' + Math.round(s.pack.soc * cap) + ' / ' + cap + ' Wh)'],
         ['motor draw', motorW + ' W'],
         ['produced today', fmtWh(s.produceToday)],
         ['harvested today', fmtWh(s.harvestToday)],
-        ['delivered today', fmtWh(s.deliverToday), 'good'],
+        ['charged up today', fmtWh(s.deliverToday)],
       ])}`;
   }
 
@@ -117,7 +133,7 @@
     tDel.textContent = fmtWh(sim.totals.delivered);
     tLost.textContent = fmtWh(sim.totals.lost);
     tEff.textContent = sim.totals.produced > 1 ? Math.round(100 * sim.totals.delivered / sim.totals.produced) + '%' : '-';
-    gnow.textContent = Math.round(sheepNowW(sim) + whNowW(sim));
+    gnow.textContent = Math.round(gridNowW(sim));
   }
 
   function toWorld(e) {
@@ -131,8 +147,14 @@
   scene.addEventListener('click', e => {
     const w = toWorld(e);
     const wh = sim.cfg.warehouse;
+    const pt = sim.cfg.plant;
+    if (w.x >= pt.x - 20 && w.x <= pt.x + pt.w + 30 && w.y >= pt.y - 20 && w.y <= pt.y + pt.h + 20) {
+      sim.selectedWh = 'plant';
+      sim.selected = null;
+      return;
+    }
     if (w.x >= wh.x - 30 && w.x <= wh.x + wh.w + 100 && w.y >= wh.y - 30 && w.y <= wh.y + wh.h + 30) {
-      sim.selectedWh = true;
+      sim.selectedWh = 'warehouse';
       sim.selected = null;
       return;
     }
@@ -176,14 +198,15 @@
     const n = +sCount.value, batt = +sBatt.value, panelW = +sPanel.value, roof = +sRoof.value;
     const panels = c.panelGBPperW * panelW * n;
     const roofC = c.panelGBPperW * roof;
-    const batts = c.batteryGBPperKWh * batt / 1000 * n;
     const drives = c.driveGBPperSheep * n;
     const inv = c.inverterGBP;
-    const total = panels + roofC + batts + drives + inv;
     const kwh = sim.totals.delivered / 1000;
+    const pool = cfg.dock.pool;
+    const batts = c.batteryGBPperKWh * batt / 1000 * pool;
+    const total = panels + roofC + batts + drives + inv;
     costEl.innerHTML = statRows([
       [`panels ${n} × ${panelW} W`, '£' + Math.round(panels)],
-      [`batteries ${n} × ${batt} Wh`, '£' + Math.round(batts)],
+      [`batteries ${pool} × ${batt} Wh`, '£' + Math.round(batts)],
       [`roof PV ${roof} W`, '£' + Math.round(roofC)],
       ['motors & wheels', '£' + Math.round(drives)],
       ['inverter', '£' + Math.round(inv)],
@@ -203,7 +226,7 @@
     cfg.panel.peakW = +sPanel.value;
     cfg.whPanel.peakW = +sRoof.value;
     sim = createSim(cfg);
-    sim.selectedWh = false;
+    sim.selectedWh = null;
     buildList();
     updateList();
     updateDetails();
@@ -219,9 +242,9 @@
     if (speed > 0) advance(sim, dtReal, speed);
     const roofW = whNowW(sim);
     const pvW = sim.sheep.reduce((a, s) => a + solarInW(sim, s), 0) + roofW;
-    const gridW = sheepNowW(sim) + roofW;
+    const gridW = gridNowW(sim);
     const motorW = sim.sheep.filter(s =>
-      s.state === 'toField' || s.state === 'toWarehouse' || s.state === 'harvesting').length * sim.cfg.motor.powerW;
+      s.state === 'toField' || s.state === 'toDock' || s.state === 'harvesting').length * sim.cfg.motor.powerW;
     draw.draw(sim, pvW, gridW, motorW);
     draw.drawChart(sim);
     updateHUD();

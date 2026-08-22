@@ -44,8 +44,17 @@ const CONFIG = {
     reserveSoc: 0.05,
   },
   motor: { powerW: 30, travelSpeed: 45, harvestSpeed: 12 },
-  grid: { dischargeW: 60 },
+  grid: { dischargeW: 60 },    // max grid discharge rate per plant discharge unit
   fullThreshold: 0.95,
+
+  dock: {
+    swapSec: 120,              // how long a battery swap takes at the single dock
+    units: 10,                 // discharge units in the battery plant
+    pool: 50,                  // total battery packs in the plant's pool
+    lineSec: 30,               // conveyor transit time, dock → plant
+  },
+  plant: { x: 70, y: 650, w: 220, h: 190 },  // battery plant building
+
   chart: { bucketSec: 60, keepSec: 24 * 3600 },
 
   cost: {

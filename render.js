@@ -4,15 +4,17 @@ const STATE_LABEL = {
   resting: 'resting',
   toField: 'to field',
   harvesting: 'sunning',
-  toWarehouse: 'coming home',
-  delivering: 'to grid',
+  toDock: 'coming home',
+  queuing: 'in dock queue',
+  swapping: 'swapping',
 };
 const STATE_COLOR = {
   resting: '#9aa7b8',
   toField: '#7aa2ff',
   harvesting: '#ffd166',
-  toWarehouse: '#ff9f68',
-  delivering: '#80ed99',
+  toDock: '#ff9f68',
+  queuing: '#f4a261',
+  swapping: '#80ed99',
 };
 
 function makeDraw() {
@@ -50,6 +52,7 @@ function makeDraw() {
 
     drawField(sim, sun);
     drawWarehouse(sim);
+    drawPlant(sim);
     drawClouds(sim);
     for (const s of sim.sheep) drawSheep(sim, s);
     drawParticles(sim);
@@ -109,7 +112,8 @@ function makeDraw() {
     ctx.beginPath(); ctx.roundRect(wh.x + 12, wh.y + 8, wh.w - 24, 7, 3); ctx.fill();
     ctx.stroke();
 
-    const gridActive = sim.sheep.some(s => s.state === 'delivering') || roofW > 1;
+    const plantW = plantNowW(sim);
+    const gridActive = plantW > 1 || roofW > 1;
     const gx = wh.x + wh.w / 2, gy = wh.y + 95;
     ctx.strokeStyle = gridActive ? '#80ed99' : '#5c6b80';
     ctx.lineWidth = 3;
@@ -117,21 +121,138 @@ function makeDraw() {
     ctx.font = '600 15px system-ui';
     ctx.fillStyle = gridActive ? '#80ed99' : '#8fa0b5';
     ctx.fillText('GRID INTAKE', gx, gy + 58);
-    const wNow = sheepNowW(sim) + roofW;
+    const wNow = plantW + roofW;
     ctx.font = '700 24px system-ui';
     ctx.fillText(wNow > 0.5 ? Math.round(wNow) + ' W' : 'idle', gx, gy + 88);
     ctx.font = '600 12px system-ui';
+    ctx.fillStyle = plantW > 0.5 ? '#80ed99' : '#5c6b80';
+    ctx.fillText('plant ' + Math.round(plantW) + ' W', gx, gy + 106);
     ctx.fillStyle = roofW > 0.5 ? '#7aa2ff' : '#5c6b80';
-    ctx.fillText('roof ' + Math.round(roofW) + ' W', gx, gy + 108);
+    ctx.fillText('roof ' + Math.round(roofW) + ' W', gx, gy + 124);
 
-    const n = sim.cfg.sheep.count;
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    // single battery-swap dock on the right wall + queue markers
+    const dp = sim.dockPos;
+    const busy = sim.dock.current !== null;
+    ctx.strokeStyle = busy ? '#ffd166' : 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = busy ? 2 : 1;
+    ctx.setLineDash(busy ? [] : [5, 5]);
+    ctx.beginPath(); ctx.roundRect(wh.x + wh.w + 4, dp.y - 26, 40, 52, 8); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = '600 11px system-ui';
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillText('DOCK', wh.x + wh.w + 24, dp.y + 42);
+    for (let i = 1; i < sim.dock.queue.length; i++) {
+      const q = sim.queuePt(i);
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.beginPath(); ctx.arc(q.x, q.y, 4, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function packColor(soc) {
+    return soc > 0.35 ? '#80ed99' : (soc > 0.15 ? '#ffd166' : '#ff6b6b');
+  }
+
+  function drawPlant(sim) {
+    const pt = sim.cfg.plant;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.roundRect(pt.x + 6, pt.y + 8, pt.w, pt.h, 10);
+    ctx.fill();
+    ctx.fillStyle = '#262e3d';
+    ctx.beginPath(); ctx.roundRect(pt.x, pt.y, pt.w, pt.h, 10); ctx.fill();
+    ctx.fillStyle = '#333c50';
+    ctx.beginPath(); ctx.roundRect(pt.x, pt.y, pt.w, 40, [10, 10, 0, 0]); ctx.fill();
+    ctx.fillStyle = '#e8ecf2';
+    ctx.font = '700 18px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('BATTERY PLANT', pt.x + pt.w / 2, pt.y + 26);
+
+    drawConveyor(sim);
+
+    // discharge units: 5 x 2 cells
+    const uCols = 5, cw = 36, ch = 40;
+    const x0 = pt.x + 16, y0 = pt.y + 54;
+    let active = 0;
+    for (let u = 0; u < sim.units.length; u++) {
+      const c = u % uCols, r = Math.floor(u / uCols);
+      const cx = x0 + c * (cw + 4), cy = y0 + r * (ch + 6);
+      const unit = sim.units[u];
+      const p = unit.p;
+      const wU = unitNowW(sim, unit);
+      if (wU > 0) active++;
+      ctx.fillStyle = '#10151f';
+      ctx.strokeStyle = wU > 0 ? 'rgba(128,237,153,0.8)' : 'rgba(255,255,255,0.12)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(cx, cy, cw, ch, 5); ctx.fill(); ctx.stroke();
+      if (p) {
+        const frac = Math.max(0, Math.min(1, (p.soc - sim.cfg.battery.reserveSoc) / (1 - sim.cfg.battery.reserveSoc)));
+        const bh = (ch - 16) * frac;
+        if (bh > 1) {
+          ctx.fillStyle = packColor(p.soc);
+          ctx.beginPath(); ctx.roundRect(cx + 4, cy + ch - 8 - bh, cw - 8, bh, 2); ctx.fill();
+        }
+        ctx.font = '600 9px system-ui';
+        ctx.fillStyle = 'rgba(255,255,255,0.75)';
+        ctx.textAlign = 'center';
+        ctx.fillText(Math.round(p.soc * 100) + '%', cx + cw / 2, cy + 10);
+      } else {
+        ctx.font = '600 10px system-ui';
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.textAlign = 'center';
+        ctx.fillText('-', cx + cw / 2, cy + ch / 2 + 4);
+      }
+    }
+    const pw = plantNowW(sim);
+    ctx.font = '600 12px system-ui';
+    ctx.fillStyle = pw > 0.5 ? '#80ed99' : '#5c6b80';
+    ctx.textAlign = 'center';
+    ctx.fillText('DISCHARGE ' + active + '/' + sim.units.length + ' - ' + Math.round(pw) + ' W', pt.x + pt.w / 2, y0 + 2 * ch + 20);
+
+    // ready rack: empty packs waiting to be carried out by a sheep
+    const ready = sim.ready;
+    const shown = Math.min(8, ready.length);
+    for (let i = 0; i < shown; i++) {
+      const px = pt.x + pt.w - 24 - i * 16, py = pt.y + pt.h - 26;
+      ctx.fillStyle = '#10151f';
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(px, py, 12, 18, 2); ctx.fill(); ctx.stroke();
+    }
+    ctx.font = '600 11px system-ui';
+    ctx.fillStyle = '#8fa0b5';
+    ctx.textAlign = 'left';
+    ctx.fillText('READY ' + ready.length, pt.x + 16, pt.y + pt.h - 13);
+    ctx.restore();
+  }
+
+  function drawConveyor(sim) {
+    const lineX0 = sim.lineX0, lineY0 = sim.lineY0, lineX1 = sim.lineX1, lineY1 = sim.lineY1;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(20,26,38,0.9)';
+    ctx.lineWidth = 10;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(lineX0, lineY0); ctx.lineTo(lineX1, lineY1); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
     ctx.lineWidth = 1;
-    for (let i = 0; i < n; i++) {
-      const dy = wh.y + 34 + (n === 1 ? (wh.h - 50) / 2 : i * (wh.h - 50) / (n - 1));
-      ctx.beginPath();
-      ctx.roundRect(wh.x + wh.w + 26, dy - 20, 62, 40, 8);
-      ctx.stroke();
+    ctx.setLineDash([4, 8]);
+    ctx.beginPath(); ctx.moveTo(lineX0, lineY0); ctx.lineTo(lineX1, lineY1); ctx.stroke();
+    ctx.setLineDash([]);
+    // intake port
+    ctx.fillStyle = '#10151f';
+    ctx.strokeStyle = 'rgba(128,237,153,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(lineX1 - 12, lineY1 - 13, 24, 26, 4); ctx.fill(); ctx.stroke();
+    // packs riding the line, SoC-coloured
+    for (const m of sim.line) {
+      const k = Math.max(0, Math.min(1, m.t / sim.cfg.dock.lineSec));
+      const x = lineX0 + (lineX1 - lineX0) * k;
+      const y = lineY0 + (lineY1 - lineY0) * k;
+      ctx.fillStyle = packColor(m.soc);
+      ctx.strokeStyle = 'rgba(10,14,20,0.9)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(x - 8, y - 6, 16, 12, 3); ctx.fill(); ctx.stroke();
     }
     ctx.restore();
   }
@@ -225,8 +346,8 @@ function makeDraw() {
     const bw = 56, bh = 7;
     ctx.fillStyle = 'rgba(10,14,20,0.75)';
     ctx.beginPath(); ctx.roundRect(-bw / 2, -46, bw, bh, 3); ctx.fill();
-    const frac = (s.soc - sim.cfg.battery.reserveSoc) / (1 - sim.cfg.battery.reserveSoc);
-    const barCol = s.soc > 0.35 ? '#80ed99' : (s.soc > 0.15 ? '#ffd166' : '#ff6b6b');
+    const frac = (s.pack.soc - sim.cfg.battery.reserveSoc) / (1 - sim.cfg.battery.reserveSoc);
+    const barCol = packColor(s.pack.soc);
     ctx.fillStyle = barCol;
     if (frac > 0.01) {
       ctx.beginPath(); ctx.roundRect(-bw / 2 + 1, -45, (bw - 2) * Math.max(0, Math.min(1, frac)), bh - 2, 2); ctx.fill();
@@ -237,10 +358,9 @@ function makeDraw() {
     ctx.fillText(`${s.name.toUpperCase()} - ${STATE_LABEL[s.state]}`, 0, -70);
 
     const pvW = solarInW(sim, s);
-    const outW = (s.state === 'delivering' && (s.soc - sim.cfg.battery.reserveSoc) * sim.cfg.battery.capacityWh > 0.01) ? sim.cfg.grid.dischargeW : 0;
     ctx.font = '600 11px system-ui';
     ctx.fillStyle = `rgba(150,210,255,${0.75 + glowAmt * 0.25})`;
-    ctx.fillText(`PV ${Math.round(pvW)} W   ${Math.round(s.soc * 100)}%   face ${Math.round(s.exposure * 100)}%${outW ? `   grid ${Math.round(outW)} W` : ''}`, 0, -56);
+    ctx.fillText(`PV ${Math.round(pvW)} W   ${Math.round(s.pack.soc * 100)}%   face ${Math.round(s.exposure * 100)}%`, 0, -56);
     ctx.restore();
   }
 
@@ -315,7 +435,7 @@ function makeDraw() {
     const c = sim.cfg.cost;
     const n = sim.cfg.sheep.count;
     const gbp = c.panelGBPperW * sim.cfg.panel.peakW * n
-      + c.batteryGBPperKWh * sim.cfg.battery.capacityWh / 1000 * n
+      + c.batteryGBPperKWh * sim.cfg.battery.capacityWh / 1000 * sim.cfg.dock.pool
       + sim.cfg.whPanel.peakW * c.panelGBPperW
       + c.driveGBPperSheep * n
       + c.inverterGBP;
@@ -329,7 +449,8 @@ function makeDraw() {
       ['PV now', Math.round(pvW) + ' W', '#7aa2ff'],
       ['grid now', Math.round(gridW) + ' W', '#80ed99'],
       ['motor', Math.round(motorW) + ' W', '#ff9f68'],
-      ['in herd', fmtWh(sim.sheep.reduce((a, s) => a + s.soc * cfg.battery.capacityWh, 0)), '#e8ecf2'],
+      ['in pool', fmtWh(poolStoredWh(sim)), '#e8ecf2'],
+      ['plant', sim.units.filter(u => unitNowW(sim, u) > 0).length + '/' + sim.units.length + ' disch  ' + sim.dock.queue.length + ' queued', '#80ed99'],
       ['produced', fmtWh(sim.totals.produced), '#e8ecf2'],
       ['lost', fmtWh(sim.totals.lost), '#ff6b6b'],
       ['today', fmtWh(sim.daily.delivered) + ' to grid', '#80ed99'],
@@ -452,7 +573,7 @@ function makeDraw() {
     cc.textAlign = 'left';
     cc.fillText('-24h', 4, H - 4);
     cc.fillStyle = '#80ed99';
-    cc.fillText('sheep', 34, H - 4);
+    cc.fillText('plant', 34, H - 4);
     cc.fillStyle = '#ffd166';
     cc.fillText('roof', 70, H - 4);
     cc.textAlign = 'right';

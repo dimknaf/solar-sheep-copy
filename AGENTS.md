@@ -23,7 +23,7 @@ before changing anything so you keep it that way.
 | `index.html` | Layout, all CSS, UI controls, **script load order** | Changing UI, adding controls, changing styling. |
 | `config.js` | The single global `CONFIG` object | Adding/tuning any simulation parameter or price. |
 | `simulation.js` | Pure-ish sim core: world init, state machine, energy math, weather, clouds, time stepping, history. | Changing behaviour, physics, energy numbers, or adding sim logic. |
-| `render.js` | All Canvas 2D drawing (scene, metrics overlay, 24h chart) and the shared `STATE_LABEL` / `STATE_COLOR` maps. | Changing visuals, labels, or colours. |
+| `render.js` | All Canvas 2D drawing (scene, battery plant, metrics overlay, 24h chart) and the shared `STATE_LABEL` / `STATE_COLOR` maps. | Changing visuals, labels, or colours. |
 | `main.js` | The `requestAnimationFrame` loop, speed control, selection, tuning, cost panel, HUD text updates. | Changing interaction, performance cadence, or what the UI shows. |
 
 ### Load order matters
@@ -37,8 +37,9 @@ config.js → simulation.js → render.js → main.js
 
 `config.js` defines `CONFIG`. `simulation.js` uses `CONFIG` (via `createSim`)
 and defines `createSim`, `stepSim`, `advance`, `sunFactor`, `sunPos`, `shadeAt`,
-`solarInW`, `weatherF`, `whNowW`, `sheepNowW`, `gridNowW` (legacy alias for
-`sheepNowW` — excludes roof), `fmtWh`, `hourOfDay`, `dayOf`, `mulberry32`,
+`solarInW`, `weatherF`, `whNowW`, `plantNowW`, `unitNowW`, `poolStoredWh`,
+`sheepNowW` (legacy no-op — the herd no longer discharges directly),
+`gridNowW` (plant + roof), `fmtWh`, `hourOfDay`, `dayOf`, `mulberry32`,
 `NAMES`, `DAY`, `WEATHER_LABEL`, `WEATHER_COLOR`, `pickWeather`.
 `render.js` defines `makeDraw` plus `STATE_LABEL` and `STATE_COLOR`.
 `main.js` is an IIFE that consumes all of the above.
@@ -68,8 +69,11 @@ the earliest file that owns the concept, and keep the load order valid.
   so Day 1 at 06:30 is what `dayOf` reports.
 - **Power** is in **watts (W)**; **energy** is in **watt-hours (Wh)**; convert
   with `dtH = dt / 3600`. `fmtWh()` pretty-prints Wh/kWh.
-- **SoC** (`s.soc`) is a **fraction 0–1**, not a percentage. Multiply by
-  `battery.capacityWh` for Wh. The usable range is `reserveSoc`…`1`.
+- **SoC** is a **fraction 0–1**, not a percentage, stored on a **pack object**
+  `{id, soc, state}`, never on the sheep. Each sheep carries one pack
+  (`s.pack`, state `'carry'`); the rest of the pool moves through the battery
+  plant (see below). Multiply by `battery.capacityWh` for Wh. Usable range is
+  `reserveSoc`…`1`.
 - **Fixed substep:** `advance()` steps the sim in fixed `cfg.substep` (0.5 s)
   increments and **carries the fractional remainder in `sim.acc`**, so total
   advance is exactly `speed × realSec` quantised to whole substeps. Do not
@@ -86,17 +90,23 @@ the earliest file that owns the concept, and keep the load order valid.
 ## Sheep state machine (refer to `simulation.js:stepSim`)
 
 ```
-resting → toField → harvesting → toWarehouse → delivering
-  ↑_______________________________|  (when empty, and it's daytime → toField)
+resting → toField → harvesting → toDock → queuing → swapping
+  ↑__________________________________________________|
+  (fresh pack: daytime → toField, after recall → resting)
 ```
 
 - `resting` → `toField` when `(t % DAY) >= sunrise + s.wake` and `< s.recall`
   (per-sheep stagger, so the herd does **not** move out as one block).
 - `toField` → `harvesting` on arrival (picks a wander target); if the sun is
-  down it bails straight to `toWarehouse`.
-- `harvesting` → `toWarehouse` when SoC ≥ `fullThreshold` or `(t % DAY) ≥ s.recall`.
-- `delivering` → back to `resting` (after recall) or `toField` (if daylight)
-  once near the reserve floor.
+  down it bails straight to `toDock`.
+- `harvesting` → `toDock` when SoC ≥ `fullThreshold` or `(t % DAY) ≥ s.recall`.
+- `toDock` → `queuing` at the dock pad.
+- `queuing` → `swapping` when first in line **and** an empty pack is waiting on
+  the ready rack (otherwise it holds the berth so the empty pack never gets
+  stuck).
+- `swapping` → after `dock.swapSec`: the sheep's pack is pushed onto the
+  conveyor (state `'line'`) and it takes an empty pack from the ready rack.
+  Then → `toField` (daylight) or `resting` (night).
 
 While sunning, each sheep **turns toward the sun** at `cfg.sheep.turnRate`
 rad/s, with a per-sheep `skill` (0.85–1.0) that both biases its target angle
@@ -108,6 +118,29 @@ When adding a state, update: the `switch` in `stepSim`, `STATE_LABEL`,
 `STATE_COLOR`, and any place that special-cases state (e.g. the "on site" count
 in `main.js`, `solarInW`'s daylight check, motor-draw checks in the overlay /
 details panel).
+
+## Battery plant (the swap line)
+
+A fixed pool of `dock.pool` (50) packs cycles through
+`carry → line → discharging → ready → carry`:
+
+- **Single dock** at the warehouse's right wall (`sim.dockPos`); at most one
+  sheep swaps at a time (`sim.dock.current`), the rest queue in
+  `sim.dock.queue` with positions from `sim.queuePt(i)`.
+- **Conveyor** `sim.line`: packs with a `t` timer, `dock.lineSec` (30 s)
+  transit, oldest first; on arrival they join `sim.ready` (state `'ready'`).
+- **Discharge units** `sim.units` (`dock.units` = 10): `stepPlant()` pulls
+  **charged** packs off `sim.ready` (FIFO; empty packs stay put, waiting for a
+  sheep to carry them out) and drains them at `grid.dischargeW` each, 95%
+  discharge efficiency, down to the reserve floor; drained packs go back to
+  `sim.ready`.
+- **Ready rack** = `sim.ready` (an array of pack objects). It holds both the
+  charged packs awaiting a unit and the empty packs awaiting a sheep. A pack
+  is "empty" when `soc <= reserveSoc + 1e-9`.
+- **Init:** pools n packs to the sheep (at the reserve floor = the unproduced
+  initial reserve) and puts the rest into `sim.ready`.
+- **Determinism:** pack ids/order are seeded; only weather/wander/particles
+  use runtime `Math.random()`.
 
 ## Weather
 
@@ -123,26 +156,33 @@ and runtime-random split (see Determinism).
 
 `sim.totals = { produced, harvest, delivered, lost }` (Wh) and `sim.daily`
 (holds the same four, reset at each midnight) feed the header, the on-canvas
-overlay, and the warehouse panel. The accounting must balance **to the
+overlay, and the warehouse/plant panels. The accounting must balance **to the
 floating-point epsilon**:
 
 ```
-produced = delivered + lost + (in-herd − initial-reserve)
+produced = delivered + lost + (in-pool − initial-reserve)
 ```
 
-- `produced` += gross PV Wh — sheep panel `gainW × dtH` **and** roof `roofW × dtH`.
-- `harvest` += Wh actually stored in sheep batteries (after charge efficiency,
-  capped by headroom).
-- `delivered` += Wh discharged to the grid (sheep + roof; `whDelivered` tracks
-  the roof's share).
-- `lost` += motor draw + clipped solar (full battery / negative net) + charge
-  loss + **discharge loss** (the extra Wh the battery burns so the grid gets
-  `outWh`: `outWh × (1/chargeEff… 1/dischargeEff − 1)`) + any clipped roof.
+where `in-pool` = `poolStoredWh(sim)` (all 50 packs, wherever they are) and
+`initial-reserve` = `sheep.count × reserveSoc × capacityWh`.
 
-`node .tmp-frames.js` **asserts this identity** (drift > 1 Wh fails). If you
-change the charge/discharge math, re-check the identity and that
-`sheepNowW()` / `whNowW()` (used by the warehouse panel, header, overlay and
-chart) still match what's really being delivered.
+- `produced` += gross PV Wh — sheep panel `gainW × dtH` **and** roof `roofW × dtH`.
+- `harvest` += Wh actually stored in a pack (after charge efficiency, capped
+  by headroom).
+- `delivered` += Wh discharged to the grid by the **plant's** units + roof;
+  `whDelivered` tracks the roof's share, `plantDelivered` the plant's.
+- `lost` += motor draw (booked exactly as the Wh it pulls out of the pack) +
+  charge loss + clipped solar (in harvesting, `lossWh = gainWh×dtH −
+  chargedWh×dtH` so the row sums exactly) + **discharge loss**
+  (`outWh × (1/dischargeEff − 1)` in the plant).
+
+Because energy can sit in any of the 50 packs, the identity only closes over
+the **whole pool** — don't "simplify" it back to the herd. `node .tmp-frames.js`
+**asserts this** (drift > 1 Wh fails), plus pool bookkeeping (every pack in
+exactly one state, `sim.ready` length matches) and that the plant actually
+delivers. If you change the charge/discharge math, re-check the identity and
+that `plantNowW()` / `whNowW()` / `gridNowW()` still match what's really being
+delivered.
 
 ## How to run & verify
 
@@ -167,10 +207,13 @@ python -m http.server 8765   # → http://localhost:8765
 
 **Headless smoke test:** `node .tmp-frames.js` runs the real `config.js`,
 `simulation.js`, `render.js`, `main.js` inside a `vm` sandbox with a mocked
-DOM/canvas, drives 3000 frames, and **exits non-zero if** the sim freezes, the
-rAF loop dies, or the energy balance drifts > 1 Wh. It prints the resulting
-clock, weather, per-sheep states/SoC/orientations and the totals breakdown.
-Run it after changing `simulation.js` or the frame loop:
+DOM/canvas, drives 3000 rAF frames, then fast-forwards a full day (~14h,
+sunrise → night) via `advance()` so the dock/conveyor/units/ready-rack are all
+exercised, then a few more live frames. It **exits non-zero if** the sim
+freezes, the rAF loop dies, the energy balance drifts > 1 Wh, the pool
+bookkeeping is inconsistent, or the plant delivered nothing. It prints the
+clock, weather, per-sheep states/pack-SoC, plant status and the totals
+breakdown. Run it after changing `simulation.js` or the frame loop:
 
 ```sh
 node .tmp-frames.js
