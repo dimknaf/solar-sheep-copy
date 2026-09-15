@@ -1,0 +1,44 @@
+#usda 1.0
+(
+    defaultPrim = "Pack"
+    upAxis = "Z"
+    metersPerUnit = 1
+    doc = "Solar Sheep battery pack — author at origin. Owner: B (envs/swap)."
+)
+
+def Xform "Pack" (
+    kind = "component"
+    assetInfo = {
+        string name = "solar_sheep_pack"
+    }
+)
+{
+    custom string user:role = "battery_pack"
+    custom float user:capacityWh = 500
+
+    def Cube "body" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsCollisionAPI", "PhysicsMassAPI"]
+    )
+    {
+        double size = 1
+        float3 xformOp:scale = (0.30, 0.20, 0.10)
+        double3 xformOp:translate = (0, 0, 0.05)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        color3f[] primvars:displayColor = [(0.15, 0.55, 0.35)]
+        float physics:mass = 4.0
+    }
+
+    # Mate point on the pack underside — dock carriage rises to this.
+    def Xform "latch_frame"
+    {
+        double3 xformOp:translate = (0, 0, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    # Mate point on the pack top — rover battery_mount attaches here.
+    def Xform "mount_frame"
+    {
+        double3 xformOp:translate = (0, 0, 0.10)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+}

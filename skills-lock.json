@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "omniverse-cad-to-simready": {
+      "source": "nvidia/skills",
+      "sourceType": "github",
+      "skillPath": "skills/omniverse-cad-to-simready/SKILL.md",
+      "computedHash": "7f84ac0da5e435c5560e96f49a2186278da3f5bbafd61ee4e6e46ae71bdc4730"
+    },
+    "omniverse-realtime-viewer": {
+      "source": "nvidia/skills",
+      "sourceType": "github",
+      "skillPath": "skills/omniverse-realtime-viewer/SKILL.md",
+      "computedHash": "5864bb721d7f91a2e4ae6e64396ea7c04cd5ebf63d9ef4caf71efe2efb28ce2c"
+    },
+    "omniverse-usd-performance-tuning": {
+      "source": "nvidia/skills",
+      "sourceType": "github",
+      "skillPath": "skills/omniverse-usd-performance-tuning/SKILL.md",
+      "computedHash": "dee225dcfc6b5c326f8e6db525e4606bf93abf87dc210674047edae6073c8382"
+    }
+  }
+}
