@@ -292,6 +292,8 @@ Skills: `workflows/first-run-setup` → `atomic/gpu-selection` → `atomic/teard
 `tools/gpu-cluster-provisioning` → `tools/token-factory` → `isaac-sim-headless-deployment` →
 `usd-composition-architecture`.
 
+C1 runbook (gates, stop conditions, no spend until a second yes): [`docs/gpu-first-run.md`](docs/gpu-first-run.md).
+
 ---
 
 ## How we work
