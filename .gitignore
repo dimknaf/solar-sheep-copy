@@ -3,3 +3,6 @@ docs/access.md
 .env
 __pycache__/
 *.pyc
+__pycache__/
+*.pyc
+renders/*.gif

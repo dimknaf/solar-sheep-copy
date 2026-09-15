@@ -1,0 +1,625 @@
+<mujoco model="solar_rover">
+  <!-- ==========================================================================
+       SOLAR ROVER  -  4-wheel skid-steer pasture rover, ~GBP 370 BOM class.
+       Units: METRES, kilograms, seconds, radians. Z-up. Authored at the origin.
+       +X = forward,  +Y = left,  +Z = up.
+
+       DESIGN POINT: a deliberately SLOW, LOW-POWERED machine. Top speed 0.28 m/s
+       is a fifth of walking pace. That is the product thesis, not a limitation:
+       ~30 W of motion buys up to 200 W of aimed solar collection, and every
+       number below is subordinate to that ratio. Nothing here can accelerate
+       hard, and the actuator limits are set so that it cannot.
+
+       AUTHORITATIVE SIM CONFIG NUMBERS THIS MODEL IS BUILT AROUND:
+         travel speed   0.28 m/s   (revised down from 0.45 - "5x slower than walking")
+         harvest speed  0.12 m/s
+         turn rate      0.6  rad/s
+         PV panel       200 W peak
+         motor draw     30 W total (all four drives)
+         battery        500 Wh
+         pasture        16 m x 10 m
+
+       Every claim below was measured on this model, not asserted. Measured
+       results, 8 s runs, steady-state averages:
+         ctrl 3.1416 on all four  -> 0.279 m/s   (target 0.28)
+         ctrl 1.333 on all four   -> 0.117 m/s   (target 0.12)
+         ctrl -/+3.1416 diff.     -> 0.571 rad/s (target 0.6 - 5% under, and it
+                                     uses the FULL ctrl range: see TURNING)
+         travel costs  8.2 W mechanical ~= 16 W electrical  (budget 30 W)
+         spin costs   20.6 W mechanical ~= 41 W electrical  (see caveat below)
+         climbs 14 deg at 0.271 m/s; stalls at 16 deg
+         cross-slope: holds flat to 33 deg, slides away at 36, never tips
+
+       ---- CHOSEN DIMENSIONS, one line of reasoning each -------------------
+       wheel radius   r = 0.090 m  : 180 mm barrow wheel, the cheapest size that
+                                     clears pasture tussocks - and paired with a
+                                     stock 30 rpm gearmotor it gives 0.283 m/s
+                                     with no gearing games at all (see ctrlrange).
+       wheel width      0.060 m    : wide enough that 30 kg on grass does not
+                                     sink or rut; also widens the contact patch
+                                     so skid-steer scrub is predictable.
+       wheelbase        0.220 m    : axles at x = +/-0.11. VERY short, and the
+                                     single most load-bearing number in the
+                                     model. A skid-steer spin drags every wheel
+                                     sideways; that resisting moment scales with
+                                     wheelbase, and the low-power drivetrain has
+                                     no torque to spare. At 0.28 m the same rover
+                                     measured 0.011 rad/s - it could not turn at
+                                     all. See the turning note in ACTUATORS.
+       track            0.800 m    : wheel centres at y = +/-0.40, i.e. right out
+                                     under the rim of the panel it already
+                                     carries - the wheels sit 49 mm INSIDE the
+                                     glass edge, so the machine got no wider
+                                     overall and still reads tidy from above.
+                                     track/wheelbase = 3.6.
+                                     Widening from 0.56 m was asked for on
+                                     stability grounds and it delivers, but not
+                                     the way you would expect - see TRACK WIDTH:
+                                     WHAT IT BOUGHT below. Roll-tip 65 deg.
+       chassis box      0.56 x 0.46 x 0.12 m : a crate, not a car. Overall length
+                                     including the panel overhang is 0.90 m, in
+                                     the requested 0.6-0.9 m band, and it drives
+                                     1 m lanes in a 16 x 10 m pasture.
+       ground clearance 0.115 m under the chassis, 0.060 m under the battery
+                                   : the battery is deliberately the lowest
+                                     thing on the machine (see below).
+
+       ---- PV PANEL SIZING -------------------------------------------------
+       200 W at 222 W/m^2 (a 22%-efficient mono-PERC module at 1000 W/m^2 STC)
+       => 0.90 m^2 of module.  Modelled as 0.90 m (fore-aft) x 1.00 m (lateral)
+       = 0.900 m^2 exactly.  A 20%-efficient module would need 1.0 m^2.
+       THE PANEL OVERHANGS THE CHASSIS AND THAT IS DELIBERATE AND REALISTIC:
+       0.17 m fore and aft beyond the 0.56 m body, and 0.07 m each side beyond
+       the 0.86 m over-wheels width - the panel is now very nearly the exact
+       plan-view silhouette of the machine, which is the tidiest a solar rover
+       can look. Real solar rovers and solar mowers all look
+       like this - the panel is the biggest, cheapest part and the chassis is
+       sized by the battery and drivetrain, not by the panel. The overhang also
+       shades the body, which helps the electronics.
+       Panel is FIXED to the deck - no gimbal. The body yaws to aim it, which is
+       why site "panel_normal" below is what the sun model will read.
+
+       ---- MASS BUDGET (kg) ------------------------------------------------
+       chassis shell + drives + electronics  12.0   welded ali box + 4 gearmotors
+       PV module (frame 2.5 + laminate 6.5)   9.0   0.90 m^2 at 10 kg/m^2 framed
+       battery pack                           4.0   500 Wh LiFePO4 @ ~125 Wh/kg
+       4 wheels @ 1.1                         4.4   wheel + tyre + hub
+       -------------------------------------------
+       TOTAL                                 29.4 kg  (288 N on four contacts)
+       The panel is a third of the machine's mass and sits at the top. That is
+       the central structural fact about a solar rover and it drives the track
+       width, the low battery, and the tip angles below. 29 kg is also what makes
+       the turn expensive - scrub torque is proportional to weight.
+
+       ---- WHY THE BATTERY HANGS UNDERNEATH --------------------------------
+       The 4 kg pack is slung below the deck, between the wheels (0.20 m fore-aft
+       inside the 0.22 m wheelbase, 0.45 m across inside the 0.74 m between wheel
+       inner faces). It is a wide flat slab, not a brick, because the short
+       wheelbase leaves no fore-aft room - and a wide flat pack is easier for a
+       ground dock to catch anyway. Two reasons, both intentional:
+         1. Low CoG. MuJoCo computes the loaded CoG at z = 0.1865 m; against the
+            0.40 m half-track that is a 65.0 deg static roll-tip angle. Move the
+            same pack up onto the deck and the CoG rises to ~0.202 m and the tip
+            angle drops to ~63 deg. Only a couple of degrees, but it is free, and
+            it counteracts the 9 kg of glass sitting 0.30 m up.
+            The number that actually matters, and it is NOT the tip angle: tyre
+            friction is 0.65, so the machine SLIDES at a 33 deg cross-slope and
+            would only TIP at 65 deg. Measured: parked across a 33 deg slope it
+            creeps 10 mm and stays perfectly flat; at 36 deg it slides away
+            without ever lifting a wheel. Sliding before tipping is the failure
+            mode you want, and this machine cannot reach its tipping angle on
+            any surface it can stay parked on.
+         2. Swap-from-below docking. Site "battery_mount" is on the underside
+            face of the pack so a ground dock can drive under, unlatch and drop
+            the pack straight down without touching the panel.
+       COMPROMISES, both real:
+         - The pack is the limiting ground clearance at 60 mm. Fine on mown or
+           grazed pasture, not fine in long grass.
+         - The short wheelbase costs PITCH stability: half-wheelbase 0.11 against
+           a CoG 0.1865 up is only a 30.5 deg nose-over angle, and the wide track
+           does nothing for that axis. It is safe only because the drivetrain is
+           too weak to climb that far: measured, the rover climbs 14 deg at
+           0.271 m/s and stalls at 16 deg, so it can never reach the angle that
+           would tip it forward. Do not hand this machine a ramp steeper than
+           ~14 deg, and note that above its climb limit it does not just stop -
+           it slides back down, wheels still turning. Pitch, not roll, is now the
+           weak axis by a factor of two.
+
+       ---- TRACK WIDTH: WHAT IT BOUGHT (and what it cost) -------------------
+       The track was widened 0.56 -> 0.80 m for stability. It paid, but not on
+       the axis anyone expected, so the measurements are worth recording.
+
+       EXPECTED: better roll stability. TRUE BUT LARGELY MOOT. Roll-tip improved
+       56.3 -> 65.0 deg. The machine never tips at either width, because at
+       mu = 0.65 it slides off a 33-36 deg cross-slope long before geometry
+       matters. The widening improved a margin that was not binding.
+
+       EXPECTED: more yaw authority, because differential thrust acts on a longer
+       arm, so maybe a faster turn. HALF TRUE, AND THE HALF THAT IS FALSE IS THE
+       TURN RATE. Yaw has two separate limits:
+         - TORQUE limit (can the motors break the wheels loose at all?). The
+           longer arm helps exactly as expected, and this is where the win is.
+         - SPEED limit (how fast can the wheels feed the turn?), which sets the
+           top yaw rate:   yaw_max ~= v_max / [ (T/2) + (L/2)^2/(T/2) ]
+           Wheel radius and motor rpm cancel out of that expression; only top
+           speed and TRACK appear. A wider track therefore makes the top yaw rate
+           WORSE at fixed road speed, because each wheel must cover more ground
+           per degree of turn.
+       Measured, at 2.4 Nm:  track 0.56 -> 0.650 rad/s;  0.80 -> 0.571 rad/s.
+       So widening cost ~12% of the turn rate and pushed it 5% under the 0.6
+       target. That is the trade, stated plainly.
+
+       WHAT IT ACTUALLY BOUGHT, and it is worth far more than the 12%: the wide
+       track removed a stiction CLIFF. Skid-steer turning does not degrade
+       gracefully - below a torque threshold the wheels never break loose and the
+       rover simply does not turn at all. At track 0.56 m the machine needed
+       2.7 Nm and still fell off that cliff when conditions hardened:
+             track 0.56, 2.4 Nm, firm grass (mu 0.8) -> 0.016 rad/s  (LOCKED)
+             track 0.56, 2.4 Nm, +5 kg payload       -> 0.014 rad/s  (LOCKED)
+       At track 0.80 m the same 2.4 Nm turns in every case tested:
+             mu 0.60 / 0.65 / 0.70 / 0.80 -> 0.581 / 0.571 / 0.558 / 0.516
+             +5 kg payload -> 0.523,  +10 kg payload -> 0.521
+       That let the motor ceiling drop 2.7 -> 2.4 Nm, which puts the drivetrain
+       back inside the honest 30 W envelope (see ACTUATORS), AND it cut the cost
+       of a turn from 25.5 W to 20.6 W mechanical, because a longer moment arm
+       needs less force. For a harvesting rover whose mass grows through the day,
+       margin against that cliff is worth more than 0.03 rad/s of turn rate.
+       ========================================================================== -->
+
+  <compiler angle="radian" coordinate="local" inertiafromgeom="auto" meshdir="." autolimits="true"/>
+
+  <!-- timestep 1 ms = 1 kHz. 2 ms also runs, but a rolling cylinder on a plane
+       makes and breaks its contact set every few steps, and at 2 ms that chatter
+       measurably robbed the turn (contact count flickering 8 -> 0, yaw well
+       below command). Wheeled contact wants a step short enough that a wheel
+       travels a small fraction of its contact patch per step: at 0.28 m/s that
+       is 0.28 mm/step against a 60 mm patch.
+       implicitfast: the velocity servos below are dampers, and implicit
+       integration of damping is what stops them ringing.
+       elliptic cone: a pyramidal cone over-serves friction on the diagonal -
+       which is exactly the diagonal a scrubbing wheel slides along, so it made
+       the rover turn flatteringly well for the wrong reason.
+       impratio 1: raising it (I tried 5) makes friction rigid and SUPPRESSES
+       slip, and this machine turns only by sliding sideways - at impratio 5 the
+       same command produced about a third of the yaw. Counter-intuitive, but
+       measured, and it is the opposite of the usual "raise impratio" advice
+       because here slip is the mechanism, not the error. -->
+  <option timestep="0.001" integrator="implicitfast" cone="elliptic" impratio="1"
+          gravity="0 0 -9.81" density="1.2" viscosity="0"/>
+
+  <size njmax="500" nconmax="200"/>
+
+  <statistic center="0 0 0.20" extent="1.3" meansize="0.05"/>
+
+  <visual>
+    <headlight ambient="0.38 0.38 0.42" diffuse="0.45 0.45 0.45" specular="0.15 0.15 0.15"/>
+    <map znear="0.01" zfar="60" shadowclip="3" shadowscale="1.2"/>
+    <quality shadowsize="4096" offsamples="8"/>
+    <global azimuth="130" elevation="-18" offwidth="1920" offheight="1080"/>
+  </visual>
+
+  <asset>
+    <texture name="sky" type="skybox" builtin="gradient"
+             rgb1="0.30 0.47 0.72" rgb2="0.82 0.89 0.96" width="512" height="3072"/>
+    <texture name="grass_tex" type="2d" builtin="checker"
+             rgb1="0.165 0.262 0.129" rgb2="0.205 0.325 0.163"
+             mark="edge" markrgb="0.13 0.21 0.11" width="512" height="512"/>
+
+    <material name="grass"     texture="grass_tex" texrepeat="1 1" texuniform="true"
+              specular="0.05" shininess="0.05" reflectance="0.0"/>
+    <!-- HERO PALETTE: dark blue-black glass on top, signal-orange body, near-black
+         wheels with pale hubs, hazard-yellow battery slung under. Four values that
+         separate cleanly against green grass in a single still frame. -->
+    <material name="pv_glass"  rgba="0.042 0.055 0.115 1" specular="0.95" shininess="0.92" reflectance="0.30"/>
+    <material name="pv_frame"  rgba="0.72 0.74 0.78 1"    specular="0.60" shininess="0.55" reflectance="0.15"/>
+    <material name="body"      rgba="0.87 0.36 0.07 1"    specular="0.35" shininess="0.35" reflectance="0.05"/>
+    <material name="body_dark" rgba="0.135 0.145 0.165 1" specular="0.35" shininess="0.35"/>
+    <material name="tyre"      rgba="0.075 0.075 0.085 1" specular="0.12" shininess="0.10"/>
+    <material name="hub"       rgba="0.80 0.81 0.84 1"    specular="0.75" shininess="0.65" reflectance="0.10"/>
+    <material name="battery"   rgba="0.95 0.78 0.10 1"    specular="0.30" shininess="0.30"/>
+    <material name="lens"      rgba="0.16 0.68 0.74 1"    specular="0.95" shininess="0.95"/>
+    <material name="site_hi"   rgba="0.95 0.25 0.18 0.85"/>
+    <material name="site_lo"   rgba="0.20 0.85 0.45 0.85"/>
+  </asset>
+
+  <default>
+    <!-- solref 0.02 (the MuJoCo default, not the stiffer 0.008 I first used):
+         a stiff contact leaves the wheels at essentially zero penetration and
+         the contact set then drops in and out between steps, which halves the
+         effective grip at random and wrecks the turn. A slightly compliant
+         contact keeps all eight wheel contacts alive - and grass is compliant
+         anyway, so this is honest as well as convenient. -->
+    <geom solref="0.02 1" solimp="0.90 0.95 0.001" condim="3"/>
+
+    <default class="wheel">
+      <!-- FRICTION: 0.65 sliding, ISOTROPIC. This is the whole trick of skid
+           steer. A real tyre has far more lateral grip than longitudinal slip
+           resistance; model that faithfully and the rover physically cannot yaw,
+           because the outside pair would have to drag the inside pair sideways
+           through a wall of grip. With condim=3 MuJoCo applies ONE isotropic
+           sliding coefficient, so lateral scrub costs exactly what longitudinal
+           slip costs, and differential thrust can rotate the machine.
+           0.65 = rubber on real pasture grass, which is slippery - it is why
+           mowers slide. It was tuned against measurements, not picked. Scrub
+           torque scales directly with mu, and at the old 0.56 m track this was
+           a knife-edge: mu 0.80 stopped the rover turning altogether (measured
+           0.011 rad/s - the motors never broke the wheels loose). The 0.80 m
+           track removed that constraint, and mu 0.80 now turns fine (0.516
+           rad/s), so this value is a free choice again rather than a hostage.
+           0.65 is kept because it is honest for pasture AND it preserves the
+           turn rate: every point of mu costs yaw. If you want more grip, 0.80
+           works and costs ~10% of the turn.
+           Either way the torque limit (16 deg) binds long before the friction
+           limit (33 deg), so mu does not set what this rover can climb. -->
+      <geom type="cylinder" material="tyre" friction="0.65 0.005 0.0001"
+            condim="3" priority="1" contype="1" conaffinity="1" group="0"/>
+      <!-- armature 0.01 >> wheel inertia (~0.0045) because a high-reduction
+           gearbox reflects far more rotor inertia than the wheel itself has; it
+           is also what keeps the velocity servo stable.
+           frictionloss 0.60 Nm per wheel does double duty and is the one place
+           this model deliberately stands in for physics it does not have.
+           MuJoCo's point contacts carry NO rolling resistance, so without it the
+           rover coasts across pasture on ~1 W and the energy model is nonsense.
+           Grass has Crr ~ 0.1: 0.1 x 288 N = 29 N of drag, / 4 wheels x 0.09 m
+           radius = 0.65 Nm per wheel. Dialled to 0.60, the sim draws 8.2 W
+           mechanical at full travel speed = ~16 W electrical at 50% drivetrain
+           efficiency, comfortably inside the config's 30 W motor budget - which
+           is the whole point of going slow. It also supplies gearbox stiction,
+           which is why the rover parks on a slope instead of creeping.
+           NOTE it is a big fraction of a 2.7 Nm torque ceiling: 0.6 of every
+           2.7 Nm is spent on rolling drag before anything moves the machine. -->
+      <joint type="hinge" axis="0 1 0" armature="0.01" damping="0.02" frictionloss="0.60"/>
+    </default>
+
+    <default class="visual">
+      <geom contype="0" conaffinity="0" group="2" mass="0"/>
+    </default>
+  </default>
+
+  <worldbody>
+
+    <!-- 5. LIGHT + GROUND so a render is never a black frame. Key light is low
+         and warm from the front-right (it is a solar machine - the sun is the
+         second character in the shot); a cool, shadowless fill from behind-left
+         keeps the dark panel and black tyres from crushing to silhouette. -->
+    <light name="sun" directional="true" castshadow="true"
+           pos="2.5 -2.0 4.0" dir="-0.45 0.38 -0.81"
+           diffuse="0.85 0.83 0.78" specular="0.25 0.25 0.25"/>
+    <light name="fill" directional="true" castshadow="false"
+           pos="-3 3 2.5" dir="0.5 -0.5 -0.7"
+           diffuse="0.20 0.22 0.26" specular="0 0 0"/>
+
+    <!-- Pasture is 16 x 10 m; plane half-extents 10 x 7 cover it with margin.
+         Same 0.65 friction as the tyres (the wheel geoms carry priority=1, so
+         the wheel's value wins outright and this is belt-and-braces). -->
+    <geom name="ground" type="plane" size="10 7 0.1" material="grass"
+          friction="0.65 0.005 0.0001" condim="3"/>
+
+    <!-- =====================  ROVER  ===================== -->
+    <!-- Chassis centre at z = 0.175: wheel axles are at z = 0.090 (= r), and the
+         0.12 m deep box then floats 0.115 m clear of the ground. -->
+    <body name="chassis" pos="0 0 0.175">
+      <!-- 2. free joint -->
+      <freejoint name="root"/>
+      <!-- No explicit <inertial>: the compiler sums shell + panel + battery geom
+           masses, so the CoG really does sit where the layout puts it. Fake the
+           inertia here and the low-battery argument becomes decoration. -->
+      <!-- shell: 0.56 x 0.46 x 0.12 m, 12 kg of ali box + 4 gearmotors +
+           electronics lumped into the one collidable geom. -->
+      <geom name="shell" type="box" size="0.28 0.23 0.06" material="body" mass="12.0"
+            friction="0.5 0.005 0.0001"/>
+      <!-- dark sill band, slightly proud of the shell so it cannot z-fight -->
+      <geom class="visual" name="sill" type="box" size="0.282 0.232 0.016" pos="0 0 -0.046"
+            material="body_dark"/>
+      <!-- forward sensor pod + lens: gives the still frame a "front" and reads
+           as a purposeful machine rather than a crate on wheels -->
+      <geom class="visual" name="pod" type="box" size="0.038 0.090 0.045" pos="0.302 0 0.005"
+            material="body_dark"/>
+      <geom class="visual" name="lens" type="cylinder" fromto="0.335 0 0.005 0.346 0 0.005"
+            size="0.026" material="lens"/>
+      <!-- rear carry handle / bump hoop -->
+      <geom class="visual" name="handle" type="capsule"
+            fromto="-0.302 -0.14 0.035 -0.302 0.14 0.035" size="0.013" material="body_dark"/>
+      <geom class="visual" name="handle_l" type="capsule"
+            fromto="-0.302 0.14 0.035 -0.275 0.14 0.045" size="0.012" material="body_dark"/>
+      <geom class="visual" name="handle_r" type="capsule"
+            fromto="-0.302 -0.14 0.035 -0.275 -0.14 0.045" size="0.012" material="body_dark"/>
+
+      <!-- ---- STUB AXLES ----
+           The 0.80 m track puts the wheels 140 mm outboard of a 0.46 m body, so
+           without these the wheels float unattached and the hero shot reads as a
+           splayed insect. Four tubes carry the wheels out from under the deck.
+           Visual only - the wheel hinges are still parented straight to the
+           chassis, so these add no bodies, no mass and no dynamics. -->
+      <geom class="visual" name="axle_fl" type="capsule"
+            fromto="0.11 0.18 -0.085 0.11 0.37 -0.085" size="0.018" material="body_dark"/>
+      <geom class="visual" name="axle_fr" type="capsule"
+            fromto="0.11 -0.18 -0.085 0.11 -0.37 -0.085" size="0.018" material="body_dark"/>
+      <geom class="visual" name="axle_rl" type="capsule"
+            fromto="-0.11 0.18 -0.085 -0.11 0.37 -0.085" size="0.018" material="body_dark"/>
+      <geom class="visual" name="axle_rr" type="capsule"
+            fromto="-0.11 -0.18 -0.085 -0.11 -0.37 -0.085" size="0.018" material="body_dark"/>
+
+      <!-- ---- PV MODULE, fixed flat on the deck, 35 mm standoff for airflow ---- -->
+      <geom class="visual" name="post_fl" type="cylinder" fromto="0.22 0.18 0.058 0.22 0.18 0.096" size="0.013" material="body_dark"/>
+      <geom class="visual" name="post_fr" type="cylinder" fromto="0.22 -0.18 0.058 0.22 -0.18 0.096" size="0.013" material="body_dark"/>
+      <geom class="visual" name="post_rl" type="cylinder" fromto="-0.22 0.18 0.058 -0.22 0.18 0.096" size="0.013" material="body_dark"/>
+      <geom class="visual" name="post_rr" type="cylinder" fromto="-0.22 -0.18 0.058 -0.22 -0.18 0.096" size="0.013" material="body_dark"/>
+      <!-- anodised frame: 0.91 x 1.01 m outer -->
+      <geom name="pv_frame" type="box" size="0.455 0.505 0.010" pos="0 0 0.105"
+            material="pv_frame" mass="2.5" friction="0.5 0.005 0.0001"/>
+      <!-- laminate: 0.89 x 0.99 m of dark blue-black cell glass = the 0.90 m^2 -->
+      <geom name="pv_glass" type="box" size="0.445 0.495 0.008" pos="0 0 0.123"
+            material="pv_glass" mass="6.5" friction="0.5 0.005 0.0001"/>
+      <!-- two busbar strips so the panel reads as cells, not a black slab -->
+      <geom class="visual" name="busbar_a" type="box" size="0.445 0.004 0.0085" pos="0 0.165 0.1235" material="pv_frame"/>
+      <geom class="visual" name="busbar_b" type="box" size="0.445 0.004 0.0085" pos="0 -0.165 0.1235" material="pv_frame"/>
+
+      <!-- ---- BATTERY: NOT HERE ANY MORE ----
+           The pack used to be three geoms of this body. It is now its own body
+           "pack" (see below, after </body>), held on by the weld equality
+           "pack_latch". Nothing about its pose, size or mass changed - only its
+           ownership - because a geom cannot be detached and a swap dock has to
+           be able to take the pack off. See the PACK block below. -->
+
+      <!-- 7. SITES -->
+      <!-- panel_normal: on the glass, +Z of this site IS the panel normal.
+           Drawn as a visible 0.10 m spike so the hero shot shows the aim axis.
+           Sun exposure later = dot(site z-axis, sun direction), and because the
+           panel is bolted flat, that dot product is a pure function of body
+           yaw and the sun vector. Sensor "panel_normal_world" reads it out. -->
+      <!-- NOTE: declared with an EXPLICIT zaxis, not fromto. A fromto-built
+           cylinder site compiled here with its frame Z pointing DOWN, which
+           silently negated dot(site_z, sun) - i.e. every exposure reading would
+           have come out backwards. Verified: this form gives world +Z = (0,0,1)
+           with the rover upright. Do not "simplify" it back to fromto. -->
+      <site name="panel_normal" type="cylinder" pos="0 0 0.181" zaxis="0 0 1"
+            size="0.008 0.05" material="site_hi" group="1"/>
+      <!-- battery_mount: on the UNDERSIDE face of the pack, z-axis pointing
+           DOWN at the dock. Frame is (x fwd, y right, z down) - a dock driving
+           under the rover sees +Z coming at it. -->
+      <site name="battery_mount" pos="0 0 -0.115" zaxis="0 0 -1" type="box"
+            size="0.045 0.085 0.006" material="site_lo" group="1"/>
+      <!-- IMU for the body-frame sensors below -->
+      <site name="imu" pos="0 0 0" size="0.012" group="4"/>
+
+      <!-- ====================  WHEELS  ====================
+           axle z_local = 0.090 - 0.175 = -0.085
+           x = +/-0.110 (0.22 m wheelbase), y = +/-0.400 (0.80 m track).
+           Wheel half-width 0.030 puts the inner face at 0.370 and the outermost
+           painted detail at 0.446, which is 49 mm inside the 0.495 glass edge
+           and 59 mm inside the 0.505 frame edge: NOTHING pokes out past the
+           panel silhouette in plan view. The 140 mm of daylight between body and
+           wheel is bridged by the stub axles above.
+           Each wheel gets a pale hub and an orange spoke bar on its outboard
+           face: at 30 rpm you need something asymmetric to read as rotation in
+           video, and a plain black cylinder reads as a stationary black disc.
+           At this speed the wheels turn once every two seconds - the spoke bar
+           is doing real work for the demo. -->
+      <body name="wheel_fl_body" pos="0.11 0.40 -0.085">
+        <joint class="wheel" name="wheel_fl"/>
+        <geom class="wheel" name="tyre_fl" fromto="0 -0.03 0 0 0.03 0" size="0.09" mass="1.1"/>
+        <geom class="visual" name="hub_fl" type="cylinder" fromto="0 0.030 0 0 0.040 0" size="0.050" material="hub"/>
+        <geom class="visual" name="spoke_fl" type="box" size="0.070 0.005 0.013" pos="0 0.041 0" material="body"/>
+      </body>
+
+      <body name="wheel_fr_body" pos="0.11 -0.40 -0.085">
+        <joint class="wheel" name="wheel_fr"/>
+        <geom class="wheel" name="tyre_fr" fromto="0 -0.03 0 0 0.03 0" size="0.09" mass="1.1"/>
+        <geom class="visual" name="hub_fr" type="cylinder" fromto="0 -0.030 0 0 -0.040 0" size="0.050" material="hub"/>
+        <geom class="visual" name="spoke_fr" type="box" size="0.070 0.005 0.013" pos="0 -0.041 0" material="body"/>
+      </body>
+
+      <body name="wheel_rl_body" pos="-0.11 0.40 -0.085">
+        <joint class="wheel" name="wheel_rl"/>
+        <geom class="wheel" name="tyre_rl" fromto="0 -0.03 0 0 0.03 0" size="0.09" mass="1.1"/>
+        <geom class="visual" name="hub_rl" type="cylinder" fromto="0 0.030 0 0 0.040 0" size="0.050" material="hub"/>
+        <geom class="visual" name="spoke_rl" type="box" size="0.070 0.005 0.013" pos="0 0.041 0" material="body"/>
+      </body>
+
+      <body name="wheel_rr_body" pos="-0.11 -0.40 -0.085">
+        <joint class="wheel" name="wheel_rr"/>
+        <geom class="wheel" name="tyre_rr" fromto="0 -0.03 0 0 0.03 0" size="0.09" mass="1.1"/>
+        <geom class="visual" name="hub_rr" type="cylinder" fromto="0 -0.030 0 0 -0.040 0" size="0.050" material="hub"/>
+        <geom class="visual" name="spoke_rr" type="box" size="0.070 0.005 0.013" pos="0 -0.041 0" material="body"/>
+      </body>
+    </body>
+
+    <!-- =====================  BATTERY PACK  =====================
+         0.20 (fore-aft) x 0.45 (across) x 0.055 m = 4.95 L for 500 Wh
+         (~101 Wh/L, a realistic cased LiFePO4 pack). A wide flat slab: the
+         0.22 m wheelbase leaves no fore-aft room, and a wide pack is an easier
+         target for the dock. The 0.80 m track leaves 145 mm of clear air to
+         each wheel's inner face, so a dock can come in from either side.
+         Top face bolts to the deck underside at z = 0.115; bottom face sits
+         0.060 m above the ground - the lowest point on the machine.
+
+         WHY THIS IS ITS OWN BODY (15 Sep 2026). It used to be three geoms of
+         the chassis, and a geom cannot be detached: any force on it moves the
+         whole 29.4 kg rover, so "swap the battery" was not representable at
+         all. It is now a free body held by the weld equality "pack_latch"
+         below, and the latch is released at runtime with
+             data.eq_active[mj_name2id(m, mjOBJ_EQUALITY, "pack_latch")] = 0
+         (or model.eq_active0 at compile time). That single byte is the whole
+         difference between a real swap and an animation.
+
+         NOTHING ELSE MOVED. Pack centre is still world (0, 0, 0.0875), pack
+         underside still 0.060, mass still 4.0 kg, straps still hang to 0.0575,
+         and with the weld ACTIVE the loaded CoG, tip angles, speed, turn rate
+         and climb limit are all unchanged - the body split is a change of
+         ownership, not of physics.
+
+         THREE CONSEQUENCES FOR ANYONE BUILDING ON THIS MODEL:
+           1. nq 11 -> 18, nv 10 -> 16, nbody 6 -> 7. nu is still 4.
+              qpos layout: [0:7] chassis free, [7:11] wheels, [11:18] pack free.
+           2. THIS FILE IS STILL AUTHORED AT THE ORIGIN, and the pack is a
+              SECOND root body. Anything that teleports the rover by writing
+              qpos[0:7] MUST write qpos[11:18] to match, or the weld will snap
+              them together violently on the first step. mj_resetDataKeyframe
+              with the "home" key below does the right thing.
+           3. body_subtreemass("chassis") is now 25.4 kg, not 29.4. Code that
+              wants the whole machine should sum chassis + pack (or use
+              mj_getTotalmass minus anything else in the scene).
+
+         The contact exclude below stops the pack's top face (z = 0.115) and the
+         shell's bottom face (z = 0.115) generating a permanent zero-gap contact
+         now that they are separate bodies. The weld is what holds them. -->
+    <body name="pack" pos="0 0 0.0875">
+      <freejoint name="pack_free"/>
+      <geom name="battery" type="box" size="0.10 0.225 0.0275" pos="0 0 0"
+            material="battery" mass="4.0" friction="0.4 0.005 0.0001"/>
+      <!-- Retaining straps travel WITH the pack - they are its bands, not the
+           rover's. They protrude 2.5 mm below the pack to z = 0.0575, so they,
+           not the pack, are the true lowest point on the machine, and a dock
+           carriage rising flat meets them first. -->
+      <geom class="visual" name="batt_strap_l" type="box" size="0.012 0.227 0.030" pos="0.06 0 0" material="body_dark"/>
+      <geom class="visual" name="batt_strap_r" type="box" size="0.012 0.227 0.030" pos="-0.06 0 0" material="body_dark"/>
+    </body>
+
+    <!-- 8. CAMERAS - all aimed at the chassis body so they stay framed even if
+         you nudge the rover's start pose. -->
+    <!-- three-quarter hero: front-right-high, the classic product shot. Sees the
+         orange flank, the dark panel raked across the frame, and a slice of the
+         yellow battery underneath. This is the still for the thumbnail. -->
+    <camera name="hero" pos="1.55 -1.45 0.92" mode="targetbody" target="chassis" fovy="42"/>
+    <!-- straight side elevation: wheelbase, panel overhang and the slung battery
+         in one silhouette. Camera height = CoG height, so the picture literally
+         shows the argument about where the mass sits. -->
+    <camera name="side" pos="0.0 -2.45 0.19" mode="targetbody" target="chassis" fovy="38"/>
+    <!-- low front three-quarter, "hero rising" angle for the video opener -->
+    <camera name="hero_low" pos="1.75 -0.95 0.28" mode="targetbody" target="chassis" fovy="45"/>
+    <!-- plan view for panel-aim / lane-coverage overlays -->
+    <camera name="top" pos="0.01 -0.30 2.60" mode="targetbody" target="chassis" fovy="45"/>
+  </worldbody>
+
+  <!-- The pack is welded to the chassis, so a contact between them is a solver
+       fight over the same constraint. Exclude it: with the weld off the pack is
+       leaving anyway, and with it on the weld is what holds the pack. -->
+  <contact>
+    <exclude name="pack_shell" body1="chassis" body2="pack"/>
+  </contact>
+
+  <!-- ======================  THE LATCH  ======================
+       relpose is stated explicitly rather than inherited from the compile-time
+       pose: (0, 0, -0.0875) is the pack origin in chassis coordinates, i.e. the
+       pack hangs 87.5 mm under the deck centre, and the identity quaternion
+       keeps it square to the body. Anything that re-latches a DIFFERENT pack
+       (a dock offering a fresh one) welds to this same relative pose and the
+       machine comes out identical to how it went in.
+       Default solref/solimp: a slightly compliant latch is honest for a
+       mechanically clamped pack and does not ring. -->
+  <equality>
+    <weld name="pack_latch" body1="chassis" body2="pack"
+          relpose="0 0 -0.0875 1 0 0 0" active="true"/>
+  </equality>
+
+  <!-- ======================  ACTUATORS  ======================
+       3. Velocity servos, one per wheel. ctrl is in JOINT rad/s.
+
+       CTRLRANGE ARITHMETIC  (revised for the 0.28 m/s design point)
+         wheel radius            r        = 0.090 m
+         wheel circumference     2*pi*r   = 0.5655 m/rev
+         target top speed        v_max    = 0.28 m/s         (sim config)
+         => omega_max = v_max / r = 0.28 / 0.090 = 3.111 rad/s
+         Rounded to the nearest real component: a stock 30 rpm gearmotor, which
+         is the cheapest, slowest, torquiest thing in the catalogue.
+           30 rpm = 30 * 2*pi / 60 = 3.1416 rad/s
+           v = omega * r = 3.1416 * 0.090 = 0.2827 m/s   <- the design speed
+         => ctrlrange = "-3.1416 3.1416"   [rad/s]
+         Measured: ctrl 3.1416 gives 0.279 m/s. The missing 1% is the 0.60 Nm of
+         rolling resistance drooping a kv=18 servo, which is what a real one does.
+         No gearing games: one catalogue motor, one wheel size, 0.28 m/s.
+
+       The other two config speeds:
+         harvest 0.12 m/s -> 0.12 / 0.090 = 1.333 rad/s   (measured 0.117 m/s)
+         spin-in-place: measured 0.571 rad/s at FULL differential ctrl, against a
+         0.6 rad/s target. That 5% shortfall is the headline constraint of the
+         slow, wide design and the behaviour layer must understand it:
+
+         *** TURNING IS THE BINDING CONSTRAINT, NOT SPEED ***
+         For a skid-steer machine the top yaw rate is
+             yaw_max ~= v_max / [ (T/2) + (L/2)^2/(T/2) ]
+         Wheel radius and motor rpm CANCEL OUT - only top speed, track T and
+         wheelbase L appear. Two consequences, both measured, both counter to
+         intuition:
+           - Cutting top speed 0.45 -> 0.28 m/s cut achievable yaw by the same
+             38%. Speed and turn rate are the same budget.
+           - WIDENING the track makes the top yaw rate WORSE, not better
+             (0.56 m -> 0.650 rad/s, 0.80 m -> 0.571 rad/s), because each wheel
+             must cover more ground per degree turned. The wider track was still
+             the right call - it bought robustness and a lower torque ceiling -
+             but it spent turn rate to do it. See TRACK WIDTH in the header.
+         The wheelbase is the one lever that helps yaw for free, which is why it
+         is 0.22 m: at the original 0.40 m wheelbase the slow rover measured
+         0.011 rad/s and could not turn at all.
+         0.571 rad/s costs the WHOLE ctrl range, so there is no headroom for a
+         full-speed arc: the behaviour stack must turn in place or slow into
+         corners. Deliberate, and true of the real machine.
+         Because a skid-steer cannot turn while its wheels roll cleanly (at the
+         kinematic speed all slip is lateral, so friction points sideways and
+         nothing is left to push the machine round), the wheels must OVERSPEED.
+         Use the measured relation, and close the loop on the gyro:
+             wheel_cmd [rad/s] ~= 5.5 * desired_yaw [rad/s]   (+/-, differential)
+         If the demo genuinely needs a true 0.6 rad/s, the cheapest fix is track:
+         0.70 m measured 0.610 rad/s and still gives a 62 deg roll-tip. Say the
+         word and it is a two-number change.
+
+       kv = 18 Nm per rad/s of error: a soft, slow, torquey servo rather than a
+       snappy one, consistent with a cheap high-reduction gearmotor. It hits the
+       2.4 Nm limit at 0.13 rad/s of droop and holds cruise speed to ~1%. NOTE it
+       is still stiff enough to reach top speed in a fraction of a second, which
+       no real gearmotor does - the behaviour layer should ramp ctrl over ~1 s.
+
+       forcerange +/-2.4 Nm - MODEST BY DESIGN, and the number that enforces the
+       low-power thesis. It comes straight out of the budget rather than being
+       reverse-fitted:
+         30 W of motion at 0.28 m/s  = 107 N of tractive force, all four wheels
+         107 N * 0.09 m / 4 wheels   = 2.4 Nm per wheel
+       and checking it the other way round:
+         total tractive force = 4 * 2.4 / 0.09 = 106.7 N absolute maximum
+         envelope corner      = 4 * 2.4 * 3.1416 = 30.2 W mechanical
+       i.e. max torque at max speed lands exactly on the 30 W thesis: the
+       drivetrain PHYSICALLY CANNOT exceed it. It cannot accelerate hard and it
+       cannot climb a serious slope: tractive force after the 0.60 Nm rolling
+       loss is 4*(2.4-0.6)/0.09 = 80 N against 288 N of weight, predicting
+       16.1 deg, and measurement gives 14 deg climbed at 0.271 m/s / 16 deg
+       stalled. That is the intended character of the machine, not a defect.
+       Measured real draw:
+         travel 0.28 m/s   8.2 W mech ~= 16 W electrical @50%  - inside budget
+         harvest 0.12 m/s  3.3 W mech ~=  7 W electrical       - inside budget
+         spin in place    20.6 W mech ~= 41 W electrical       - OVER budget
+       THE CAVEAT TO CARRY INTO THE ENERGY MODEL: scrub steering is expensive and
+       a spin-in-place transiently costs ~2.5x the cruise draw. It is inside the
+       500 Wh battery by a mile - a 90 deg turn takes 2.7 s and costs 0.031 Wh -
+       but bill turns separately rather than assuming a flat 30 W.
+       This ceiling was 2.7 Nm at the old 0.56 m track and could not be lowered:
+       2.4 Nm there fell off the stiction cliff and the rover stopped turning
+       entirely on firm grass (0.016 rad/s) or with a payload (0.014 rad/s). The
+       0.80 m track fixed that - 2.4 Nm now turns across mu 0.60-0.80 and with
+       10 kg aboard - so widening the track is what bought the honest 30 W
+       number. Do not raise this ceiling back up without re-reading the header. -->
+  <actuator>
+    <velocity name="mot_fl" joint="wheel_fl" kv="18" ctrlrange="-3.1416 3.1416" forcerange="-2.4 2.4"/>
+    <velocity name="mot_fr" joint="wheel_fr" kv="18" ctrlrange="-3.1416 3.1416" forcerange="-2.4 2.4"/>
+    <velocity name="mot_rl" joint="wheel_rl" kv="18" ctrlrange="-3.1416 3.1416" forcerange="-2.4 2.4"/>
+    <velocity name="mot_rr" joint="wheel_rr" kv="18" ctrlrange="-3.1416 3.1416" forcerange="-2.4 2.4"/>
+  </actuator>
+
+  <!-- Readouts the energy model will want: panel aim (world unit vector), panel
+       position, and body-frame velocity/rate for the drive controller. Close the
+       turn loop on chassis_gyro[2] - see the scrub note above. -->
+  <sensor>
+    <framezaxis name="panel_normal_world" objtype="site" objname="panel_normal"/>
+    <framepos    name="panel_pos_world"   objtype="site" objname="panel_normal"/>
+    <velocimeter name="chassis_vel"  site="imu"/>
+    <gyro        name="chassis_gyro" site="imu"/>
+  </sensor>
+
+  <keyframe>
+    <!-- parked flat at the origin, wheels at rest, pack latched under the deck.
+         Layout: chassis free [0:7] | wheels [7:11] | pack free [11:18]. -->
+    <key name="home"
+         qpos="0 0 0.175 1 0 0 0  0 0 0 0  0 0 0.0875 1 0 0 0"
+         ctrl="0 0 0 0"/>
+  </keyframe>
+</mujoco>

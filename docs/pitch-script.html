@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solar Sheep — 3-minute pitch script</title>
+<style>
+  :root{
+    --bg:#faf9f6; --panel:#fff; --ink:#1a1a18; --muted:#6b6a64; --line:#e2e0d8;
+    --accent:#b4531f; --accent-soft:#fdf3ec; --green:#2f6f3e; --green-soft:#eef5ef;
+    --shot:#4a4a44;
+  }
+  :root:not([data-theme="light"]){}
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#14140f; --panel:#1c1c17; --ink:#eceae2; --muted:#9a978c; --line:#33322a;
+      --accent:#e8874a; --accent-soft:#2a1d13; --green:#7fbf8c; --green-soft:#17251a;
+      --shot:#b8b5a8;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#14140f; --panel:#1c1c17; --ink:#eceae2; --muted:#9a978c; --line:#33322a;
+    --accent:#e8874a; --accent-soft:#2a1d13; --green:#7fbf8c; --green-soft:#17251a;
+    --shot:#b8b5a8;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    margin:0; padding-block:40px; padding-left:20px; padding-right:20px;
+  }
+  .wrap{max-width:1000px; margin:0 auto}
+
+  header{border-bottom:2px solid var(--ink); padding-bottom:18px; margin-bottom:28px}
+  h1{font:600 30px/1.15 Georgia,"Times New Roman",serif; margin:0 0 8px}
+  .sub{color:var(--muted); font-size:14px}
+  .sub b{color:var(--ink); font-weight:600}
+
+  .rulebar{
+    background:var(--accent-soft); border-left:3px solid var(--accent);
+    padding:14px 16px; margin:0 0 30px; font-size:14px;
+  }
+  .rulebar p{margin:0 0 6px}
+  .rulebar p:last-child{margin:0}
+  .rulebar b{color:var(--accent)}
+
+  h2{
+    font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+    margin:40px 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line);
+  }
+
+  .beat{
+    display:grid; grid-template-columns:78px 1fr 270px; gap:22px;
+    padding:20px 0; border-bottom:1px solid var(--line); align-items:start;
+  }
+  .beat:last-child{border-bottom:none}
+
+  .t{font:600 13px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:var(--accent); padding-top:4px}
+  .t span{display:block; color:var(--muted); font-weight:400; font-size:11px; margin-top:3px}
+
+  .vo{font:19px/1.6 Georgia,"Times New Roman",serif}
+  .vo p{margin:0 0 12px}
+  .vo p:last-child{margin:0}
+  .vo em{font-style:italic; color:var(--accent)}
+  .label{
+    font:600 10px/1 -apple-system,sans-serif; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--muted); display:block; margin-bottom:8px;
+  }
+
+  .shot{font-size:13px; line-height:1.5; color:var(--shot)}
+  .shot p{margin:0 0 8px}
+  .shot p:last-child{margin:0}
+  .onscreen{
+    display:inline-block; background:var(--panel); border:1px solid var(--line);
+    border-radius:3px; padding:3px 7px; margin:3px 3px 0 0;
+    font:600 12px/1.3 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:var(--ink);
+  }
+
+  table{width:100%; border-collapse:collapse; font-size:14px; margin:0 0 10px}
+  th,td{text-align:left; padding:9px 12px 9px 0; border-bottom:1px solid var(--line); vertical-align:top}
+  th{font-weight:600; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
+  td:first-child{white-space:nowrap; font-weight:600}
+  .scroll{overflow-x:auto}
+
+  .qa{margin:0 0 16px; padding-left:16px; border-left:2px solid var(--line)}
+  .qa .q{font-weight:600; margin:0 0 5px}
+  .qa .a{margin:0; color:var(--muted); font-size:15px}
+  .qa .a b{color:var(--ink); font-weight:600}
+
+  .note{background:var(--green-soft); border-left:3px solid var(--green); padding:14px 16px; font-size:14px; margin:0 0 20px}
+  .note p{margin:0 0 6px}
+  .note p:last-child{margin:0}
+
+  footer{margin-top:46px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:13px}
+
+  @media (max-width:760px){
+    .beat{grid-template-columns:1fr; gap:12px}
+    .t{padding-top:0}
+    .t span{display:inline; margin-left:8px}
+    .vo{font-size:18px}
+    .shot{padding-top:6px; border-top:1px dashed var(--line)}
+  }
+  @media print{
+    body{background:#fff; color:#000; padding:0; font-size:12px}
+    .beat{break-inside:avoid; page-break-inside:avoid}
+    h2{break-after:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Solar Sheep — the three-minute script</h1>
+  <p class="sub">
+    Submission video voice-over &amp; shot list · <b>target 3:00</b> · ~435 words at 145&nbsp;wpm<br>
+    Nebius&nbsp;×&nbsp;NVIDIA Global AI Hackathon, Physical AI track · doubles as the live pitch
+  </p>
+</header>
+
+<div class="rulebar">
+  <p><b>Two hard constraints from <code>docs/rules.md</code>, and the script is built around them:</b></p>
+  <p>1. <b>“Judges are not required to watch beyond three minutes.”</b> Nothing load-bearing goes after 3:00.</p>
+  <p>2. <b>Nebius + an NVIDIA open-source model are an eligibility gate</b>, not a bonus — so the stack is named at 0:18, on screen and out loud, before a single technical detail.</p>
+</div>
+
+<h2>The script</h2>
+
+<div class="beat">
+  <div class="t">0:00<span>18 s · 48 w</span></div>
+  <div class="vo">
+    <span class="label">Voice-over — cold open</span>
+    <p>A solar panel now costs less than the steel you would bolt it to.</p>
+    <p>The module is cheap. The concrete, the trenching, the crane, the labour, the planning application — <em>that</em> is the solar farm.</p>
+    <p>So we stopped installing solar panels. We let them walk.</p>
+  </div>
+  <div class="shot">
+    <span class="label">Shot</span>
+    <p>No logo, no title card. Open on the herd already moving — wide, low, sun behind them, Isaac Sim beauty pass. Five sheep fanning out across pasture.</p>
+    <p>On “we let them walk”: cut to a single rover cresting rubble, panel catching the light.</p>
+    <span class="onscreen">SOLAR SHEEP</span>
+  </div>
+</div>
+
+<div class="beat">
+  <div class="t">0:18<span>14 s · 33 w</span></div>
+  <div class="vo">
+    <span class="label">Voice-over — the stack, early and deliberate</span>
+    <p>This is Solar Sheep: a herd of autonomous mobile collectors, simulated in <em>NVIDIA Isaac Sim</em> on a <em>Nebius AI Cloud</em> RTX PRO 6000, with an <em>NVIDIA Nemotron</em> model on <em>Nebius Token Factory</em> running the herd.</p>
+  </div>
+  <div class="shot">
+    <span class="label">Shot</span>
+    <p>Architecture diagram builds in three layers as they are named — Nemotron / behaviour tree / Isaac Sim. Keep it on screen ~6 s, then straight back to the sim.</p>
+    <p>This beat is the eligibility gate. Do not shorten it and do not move it later.</p>
+    <span class="onscreen">Nemotron → herd dispatch</span>
+    <span class="onscreen">Isaac Sim · Nebius RTX PRO 6000</span>
+  </div>
+</div>
+
+<div class="beat">
+  <div class="t">0:32<span>43 s · 105 w</span></div>
+  <div class="vo">
+    <span class="label">Voice-over — why this beats a fixed array</span>
+    <p>Three reasons this beats bolting panels to the ground.</p>
+    <p><em>One: there is no installation.</em> The panel arrives already mounted on the thing that carries it. You unload it, and it is working.</p>
+    <p><em>Two: nothing is dug and nothing is bolted down.</em> The field is still a field — and a machine that can drive away again is a far smaller thing to get permission for.</p>
+    <p><em>Three: you were going to buy the batteries anyway.</em> Midday solar already beats midday demand in market after market, and daytime prices are heading to zero. Any new array needs storage to be worth building.</p>
+    <p>So if the battery is compulsory — and the battery is the part that leaves the field — why pay for the installation at all? The energy goes out in a box, not a trench.</p>
+  </div>
+  <div class="shot">
+    <span class="label">Shot</span>
+    <p><b>One:</b> time-lapse contrast — pile-driver / trench / crane stills, hard cut to a sheep being tipped off a flatbed and simply driving off.</p>
+    <p><b>Two:</b> herd grazing among actual sheep if the asset exists; otherwise the herd crossing untouched pasture, no fences, no piles.</p>
+    <p><b>Three:</b> the duck curve. One chart, two lines, the midday belly shaded. Hold it — this is the argument judges will not have heard.</p>
+    <p>Land on the pack sliding out of the chassis as “goes out in a box” lands.</p>
+    <span class="onscreen">no groundworks</span>
+    <span class="onscreen">reversible = permittable</span>
+    <span class="onscreen">storage is already compulsory</span>
+  </div>
+</div>
+
+<div class="beat">
+  <div class="t">1:15<span>58 s · 140 w</span></div>
+  <div class="vo">
+    <span class="label">Voice-over — how it actually works</span>
+    <p>Each sheep is a four-wheel skid-steer rover. Panel on top, a four-kilo, five-hundred-watt-hour pack slung underneath.</p>
+    <p>Skid steer means heading <em>is</em> panel orientation — so driving and sun-tracking are one control problem, not two.</p>
+    <p>And the driving is trained, not scripted: four thousand rovers in parallel on a single GPU, PPO, over a curriculum of rubble, slope and obstacles that gets harder as the policy gets better.</p>
+    <p>When a pack fills, the sheep drives <em>over</em> the dock, and the pack is lifted out from underneath. Gravity does the alignment. In simulation that is a real constraint release — the weld opens and the pack becomes a free body. Nothing is teleported.</p>
+    <p>A Nemotron model is the herd brain: who goes to which patch, who swaps next, and what to do when the dock is blocked or a rover browns out.</p>
+  </div>
+  <div class="shot">
+    <span class="label">Shot</span>
+    <p>Exploded view of the rover, one second per callout: panel, pack, four motors.</p>
+    <p>Sun-tracking: top-down, the rover pivoting to hold the sun as it drives. Overlay the live exposure number.</p>
+    <p><b>Training montage — the technical-implementation beat.</b> Grid of parallel envs, then the reward curve climbing, then the same rover failing early vs. clearing the course late. Side by side.</p>
+    <p><b>The swap, in full, no cuts.</b> Low angle at pack height, rover drives over, carriage rises, pack drops away. This is the money shot — give it the time it needs.</p>
+    <p>Close on the orchestrator: JSON command on the left, herd reacting on the right. Show one <b>failure</b> and the recovery.</p>
+    <span class="onscreen">4096 parallel envs · PPO</span>
+    <span class="onscreen">heading = panel aim</span>
+    <span class="onscreen">weld released — not a teleport</span>
+  </div>
+</div>
+
+<div class="beat">
+  <div class="t">2:13<span>25 s · 60 w</span></div>
+  <div class="vo">
+    <span class="label">Voice-over — the ratio the whole thesis rests on</span>
+    <p>It all comes down to one ratio. About thirty watts of motion, to aim nearly two hundred watts of collection. Cruising, it is eight.</p>
+    <p>A ninety-degree turn costs three hundredths of a watt-hour. That is why a collector that moves can beat one that cannot — and why it has to be slow, light and cheap.</p>
+    <p>Run the fleet for a day and the books balance: everything produced is delivered, lost, or still sitting in a pack.</p>
+  </div>
+  <div class="shot">
+    <span class="label">Shot</span>
+    <p>Two numbers, huge, side by side, held for four full seconds: <b>30&nbsp;W to move · 196&nbsp;W to collect</b>.</p>
+    <p>Then the fleet dashboard — 24-hour grid-power chart filling in, the energy ledger reconciling to zero.</p>
+    <p>Speed the clock up: a full simulated day of the herd in ~6 s.</p>
+    <span class="onscreen">30 W moving → 196 W collecting</span>
+    <span class="onscreen">produced = delivered + lost + stored</span>
+  </div>
+</div>
+
+<div class="beat">
+  <div class="t">2:38<span>17 s · 42 w</span></div>
+  <div class="vo">
+    <span class="label">Voice-over — close</span>
+    <p>No groundworks. No trenches. No planning fight.</p>
+    <p>You buy panels and batteries — the two things in energy that keep getting cheaper — and you put them in a field.</p>
+    <p>Solar Sheep. The solar farm that walks in.</p>
+  </div>
+  <div class="shot">
+    <span class="label">Shot</span>
+    <p>Pull back to the widest shot in the film: the whole herd, low sun, long shadows.</p>
+    <p>Title, repo URL, and the two sponsor marks on the last frame — hold 3 s so a paused frame reads cleanly.</p>
+    <span class="onscreen">SOLAR SHEEP</span>
+    <span class="onscreen">github.com/… · Nebius · NVIDIA</span>
+  </div>
+</div>
+
+<h2>If the timing slips</h2>
+
+<div class="note">
+  <p><b>Cut in this order.</b> Every cut below is designed to leave the argument standing.</p>
+</div>
+
+<div class="scroll">
+<table>
+  <tr><th>Cut</th><th>Saves</th><th>What you lose</th></tr>
+  <tr><td>Trim “Three: batteries anyway” to one sentence</td><td>~10 s</td><td>The strongest <em>original</em> argument. Cut this last, not first.</td></tr>
+  <tr><td>Drop the exploded-view callouts</td><td>~8 s</td><td>Nothing — the shot already shows the layout.</td></tr>
+  <tr><td>Drop “cruising, it is eight”</td><td>~4 s</td><td>A supporting number; 30&nbsp;W vs 196&nbsp;W carries it alone.</td></tr>
+  <tr><td>Shorten the training montage to the before/after pair</td><td>~8 s</td><td>Some Technological Implementation credit — the top-weighted criterion. Reluctantly.</td></tr>
+  <tr><td>Never cut</td><td>—</td><td>The 0:18 stack beat, the uncut swap shot, the orchestrator failure-recovery moment.</td></tr>
+</table>
+</div>
+
+<h2>60-second version</h2>
+
+<p style="font:18px/1.6 Georgia,serif; max-width:70ch">
+  Cold open (0:00) → stack (0:18) → <em>only</em> reason two-and-three, merged: “nothing is dug, and you were buying the batteries anyway — so why pay to install anything?” (0:32) → the uncut swap shot (0:45) → 30&nbsp;W&nbsp;/&nbsp;196&nbsp;W (0:52) → close (0:56).
+</p>
+
+<h2>Live pitch — the five extra minutes</h2>
+
+<p style="max-width:70ch">If you are presenting in person with time for questions, the video script <i>is</i> the talk. Add these only if asked, in this order:</p>
+
+<div class="scroll">
+<table>
+  <tr><th>Topic</th><th>The one thing to say</th></tr>
+  <tr><td>Unit economics</td><td>Panel, pack, four motors, a frame. The expensive half of a conventional build — mounting, wiring, civils, grid connection — is simply absent. Cost model is live in the sim and updates as you move the sliders.</td></tr>
+  <tr><td>Why not a tracker?</td><td>A tracker is a foundation, a motor and a maintenance contract, for one axis. We already have wheels. Aiming is free.</td></tr>
+  <tr><td>Why trained, not scripted?</td><td>Scripted driving breaks on real terrain. Scripted <em>insertion</em> is a twenty-year open problem — so we train the approach and solve the last centimetre mechanically, exactly as production battery-swap stations do.</td></tr>
+  <tr><td>Why is the dock drive-over?</td><td>Pack underneath, dock below: gravity aligns it. Berth tolerance is ±35&nbsp;mm and ±9°, which the trained policy comfortably hits at creep speed.</td></tr>
+  <tr><td>Sim-only?</td><td>The track’s own rules accept “key application modules in action” with no hardware. The physics is MuJoCo/Isaac, the swap is a real constraint release, and the energy ledger balances to the watt-hour.</td></tr>
+</table>
+</div>
+
+<h2>Questions to have an answer ready for</h2>
+
+<div class="qa">
+  <p class="q">“Sheep get stolen. Panels on wheels get stolen faster.”</p>
+  <p class="a">Every unit is tracked, and a stolen unit is a 30&nbsp;W, 0.28&nbsp;m/s machine that has to be carried off a field. <b>More importantly: it is insurable, and a fixed array’s biggest risk — a planning refusal after you have spent the capital — is not.</b></p>
+</div>
+
+<div class="qa">
+  <p class="q">“Land use is the same. You still cover the field.”</p>
+  <p class="a">No — the herd is sparse and it moves. The land keeps its use, and the ground is never sealed. <b>That is the difference between renting a field and retiring it.</b></p>
+</div>
+
+<div class="qa">
+  <p class="q">“Moving parts mean maintenance. Fixed arrays have none.”</p>
+  <p class="a">True, and it is the real trade. Our answer is that the moving part is deliberately the cheapest thing in the system — four stock gearmotors inside a 30&nbsp;W envelope — and a broken sheep is <b>driven away and replaced</b>, not repaired in the field on a scaffold.</p>
+</div>
+
+<div class="qa">
+  <p class="q">“Why does it need an LLM? This is a scheduling problem.”</p>
+  <p class="a">Dispatch is scheduling. <b>Recovery is not.</b> Dock blocked, a rover browning out mid-field, weather turning early — that is open-ended and it is where Nemotron sits. Show the failure clip; do not argue it.</p>
+</div>
+
+<div class="qa">
+  <p class="q">“It’s only simulated.”</p>
+  <p class="a">Name it before they do — it is in the first minute of the close if you are live. The rules explicitly allow it, and in NVIDIA’s own Cosmos Cookoff first <i>and</i> second place were both simulation-only. <b>Then pivot to the physics fidelity, which is the strong ground.</b></p>
+</div>
+
+<h2>Recording notes</h2>
+
+<p style="max-width:70ch">
+  Record voice-over first and cut picture to it — not the other way round. Read <b>slower than feels right</b>; the cold open in particular wants air between the three sentences. Every number spoken aloud must also be on screen, because the judges may be watching muted. Validate every Isaac scene with <code>isaac-sim-validator</code> before you film it: the black-frame / missing-lights failure is silent and would cost the whole shoot.
+</p>
+
+<footer>
+  Numbers are from <code>robot/SPEC.md</code> and <code>envs/traverse/README.md</code>; the rationale matches the <b>Why</b> section of the repo README. Re-check the 196&nbsp;W figure against the final panel area before recording — the spec notes the header comment drifts 2%.
+</footer>
+
+</div>
+</body>
+</html>
