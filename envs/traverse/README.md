@@ -1,191 +1,316 @@
-# `envs/traverse` — pose + heading tracking policy
+# `envs/traverse` — pose + heading tracking with obstacle avoidance
 
-One file, `train.py`. Trains the rover's `traverse()` skill: **drive to a commanded
-(x, y) and settle at a commanded yaw**, over slightly rough ground, without tipping.
-Targets resample as they are reached, so one episode is several commands.
+One file, `train.py`. Trains the rover's `traverse()` skill: **drive to a commanded (x, y),
+settle at a commanded yaw, do not hit anything, do not tip** — over ground that gets rougher and
+more cluttered as training proceeds. Targets resample as they are reached, so one episode is
+several commands.
 
-> The reward contains **nothing about the sun**. "Face the sun" has a degenerate optimum —
-> park facing the sun and never move. Sun-seeking is the planner's decision; this policy only
-> executes "go here, end up pointing this way". Because skid steer makes heading == panel
-> orientation, that is all the planner needs from us.
+> The reward contains **nothing about the sun**. "Face the sun" has a degenerate optimum — park
+> facing the sun and never move. Sun-seeking is the planner's decision; this policy only executes
+> "go here, end up pointing this way". Because skid steer makes heading == panel orientation,
+> that is all the planner needs from us.
 
-`robot/rover.xml` is owned by another workstream and is **never written to**. Everything the
-training and rendering setup needs (ground plane if absent, lights, bumps, a target marker) is
-injected by compiling a small wrapper MJCF that `<include>`s it.
+`robot/rover.xml` is owned by another workstream and is **never written to**. Sites, rangefinder
+sensors, terrain, obstacles and the target marker are injected into an **in-memory `MjSpec`**
+built from it. The file on disk is untouched.
 
 ---
 
 ## Stack: MuJoCo MJX + Brax PPO
 
-Chosen over Isaac Lab / SB3-on-CPU because it is the only route that fits the budget:
-
-- **Thousands of envs on one GPU.** MJX runs the whole physics step as XLA kernels, so 4096
-  rovers step in lockstep on the RTX PRO 6000. Brax PPO keeps rollout, GAE and SGD on-device —
-  no host round-trip per step.
-- **Published precedent at this scale.** The Go1 joystick policy trains in roughly 7 minutes on
-  a single RTX 4090 with this exact stack. A 4-wheel skid-steer rover has a far smaller action
-  space than a 12-DoF quadruped, so ~10 minutes is a comfortable target, not a stretch.
+- **Thousands of envs on one GPU.** MJX runs the physics step as XLA kernels, so 4096 rovers
+  step in lockstep on the RTX PRO 6000. Brax PPO keeps rollout, GAE and SGD on-device.
+- **Published precedent at this scale.** The Go1 joystick policy trains in ~7 minutes on a single
+  RTX 4090 with this exact stack.
 - **No conversion step.** The env is written directly against MJX and the bare `brax.envs.Env`
-  interface, *not* `brax.PipelineEnv`. That means brax's MJCF importer never has to understand
-  `rover.xml` — only MuJoCo does. Same approach MuJoCo Playground takes, and it removes the
-  most common source of "works in MuJoCo, fails in Brax".
-- **The renderer is the same engine.** `--rollout` replays on plain CPU MuJoCo with the offscreen
-  renderer, which doubles as a free sim-to-sim check: if the MJX-trained policy also works under
-  the reference C solver, it is not exploiting an MJX artefact.
+  interface, *not* `brax.PipelineEnv`, so brax's MJCF importer never has to understand
+  `rover.xml` — only MuJoCo does. Same approach MuJoCo Playground takes.
+- **The renderer is the same engine.** `--rollout` replays on plain CPU MuJoCo, which doubles as
+  a sim-to-sim check (it also prints the max disagreement between the real MuJoCo rangefinder and
+  the analytic ray model).
 
 ### ⚠️ The Blackwell (sm_120) risk
 
 JAX CUDA wheels have historically lagged on new architectures, and the failure mode is silent:
-JAX quietly runs on CPU and a 10-minute run becomes a 10-hour one. So the script's **first
-action**, before touching MuJoCo, is to print `jax.devices()`, the backend, the device kind and
-the compute capability, then **hard-exit(2)** if the backend is not `gpu`. `--allow-cpu` overrides.
+JAX quietly runs on CPU and a 20-minute run becomes a 20-hour one. So the script's **first
+action** is to print `jax.devices()`, the backend, device kind and compute capability, then
+**hard-exit(2)** if the backend is not `gpu`. `--allow-cpu` overrides. Two further tripwires:
 
-Two further tripwires, because "a GPU is visible" is not the same as "sm_120 code was emitted":
-
-1. A 4096³ matmul benchmark at startup. A healthy RTX PRO 6000 is far above 5 TFLOP/s; below
-   that the script warns loudly and tells you to suspect the jaxlib CUDA build.
-2. **The first jitted step is timed separately from steady state.** A pathologically slow first
-   compile (minutes, not seconds) is the signature of runtime PTX→SASS JIT, i.e. the wheel
-   shipped no Blackwell binary. The script prints `FIRST reset`, `FIRST step` and `steady step`
-   on their own lines and warns above 240 s.
+1. A 4096³ matmul benchmark at startup — below 5 TFLOP/s it warns loudly.
+2. **The first jitted step is timed separately from steady state.** A first compile measured in
+   minutes rather than seconds is the signature of runtime PTX→SASS JIT, i.e. a wheel with no
+   Blackwell binary.
 
 ---
 
 ## Install (resolve latest, verify, pin what you got)
 
-**Nothing in this repo is pinned from memory.** Install the current versions, read what the
-script prints at startup, and pin *those* — not whatever a model remembered.
+**Nothing here is pinned from memory.** Install current versions, read what the script prints at
+startup, pin *those*.
 
 ```bash
 pip install -U "jax[cuda12]" mujoco mujoco-mjx brax "imageio[ffmpeg]"
-```
-
-Then verify before trusting it:
-
-```bash
 python -c "import jax; print(jax.__version__, jax.default_backend(), jax.devices())"
 nvidia-smi --query-gpu=name,driver_version,compute_cap --format=csv
 ```
 
-`train.py` prints the resolved `jax / jaxlib / mujoco / mujoco-mjx / brax / flax / optax`
-versions on every run. Copy that block into `requirements.txt` once a run succeeds.
-
-If `jax[cuda12]` has no sm_120 support yet, the fallbacks in order are: NVIDIA's JAX container
-(`nvcr.io/nvidia/jax`), or a nightly jaxlib. Do not "fix" it by training on CPU.
+`train.py` prints resolved `jax / jaxlib / mujoco / mujoco-mjx / brax / flax / optax` on every
+run. Copy that block into `requirements.txt` once a run succeeds. If `jax[cuda12]` has no sm_120
+support, fall back to NVIDIA's JAX container (`nvcr.io/nvidia/jax`) or a nightly jaxlib — **not**
+to CPU.
 
 ---
 
 ## Commands
 
 ```bash
-# 1. pipeline gate — builds the env, steps it, runs 2 tiny PPO iterations, exits (~1 min)
+# 1. pipeline gate — builds, steps, runs 2 tiny PPO iterations, exits
 python train.py --smoke
 
-# 2. the real run (~10 min on one RTX PRO 6000)
+# 2. the real run (~15–25 min on one RTX PRO 6000)
 python train.py
 
-# 3. the deliverable: one episode, MP4 with a chase camera following the rover
+# 3. ESCAPE HATCH: the simple pose-tracking task we know trains in ~10 min
+python train.py --rough 0 --obstacles 0 --rubble 0
+
+# 4. the deliverable
 python train.py --rollout --params runs/params.pkl
+python train.py --rollout --cam hero --rollout-difficulty 1.0   # model camera, max difficulty
 ```
 
-Useful knobs: `--steps 50000000 --num-envs 4096 --episode-seconds 20 --bumps 12
---action-mode two --model /path/to/rover.xml --cam-distance 3.2`.
+Outputs: `runs/params.pkl`, `runs/meta.json`, `runs/rollout.mp4` (PNG + ffmpeg-line fallback).
 
-Run `--smoke` first, every time. It is the gate.
-
-### Outputs
-
-| path | what |
-|---|---|
-| `runs/params.pkl` | trained PPO params (normalizer + policy + value), via `brax.io.model` |
-| `runs/meta.json` | obs/act dims, reward weights, resolved versions, wall clock — everything `--rollout` needs to reproduce the policy |
-| `runs/rollout.mp4` | 1280×720 chase-cam video of one episode |
-| `runs/rollout/frame_*.png` | fallback if no ffmpeg; the script prints the exact `ffmpeg` line to run |
-
-Per-iteration progress goes to stdout:
+Progress line per eval:
 
 ```
-[  7]   17,825,792 steps ( 35.7%)  R=  184.3 +/-31.2   len= 1000 dist= 0.71 head= 0.38 reach= 0.021 up= 0.99   1,430k sps   231.4s  eta 4.1m
+[  7]   21,000,000 ( 35.0%)  R=  184.3 len= 1250 dist= 0.71 head= 0.38 reach= 0.021 hit= 0.004 up= 0.99 diff= 0.58   980k sps   402.1s  eta 12.4m
 ```
 
-`dist` should fall, `head` should fall, `reach` (fraction of steps at a satisfied target) should
-rise, `up` should stay near 1.0. If `len` collapses, the rover is tipping.
+`dist`/`head` should fall, `reach` rise, `hit` stay low, `up` near 1.0, `diff` ramp 0→1. If `len`
+collapses the rover is tipping; if `hit` climbs while `reach` stalls, the collision penalty is
+losing to progress and wants raising.
 
 ---
 
-## Observation / action / reward
+## Observation — 32 dims (30 with `--action-mode two`)
 
-**Observation (21 floats for 4 wheels + 4 actions)** — everything in the rover's own body frame,
-because relative targets generalise and world coordinates do not:
+Body frame throughout: relative targets generalise, world coordinates do not.
 
 | block | dims | notes |
 |---|---|---|
 | chassis linear velocity | 3 | `Rᵀ · qvel[lin]` — MuJoCo stores free-joint linear velocity in the **world** frame |
-| chassis angular velocity | 3 | taken straight from `qvel[ang]`, which is **already body-local** |
-| up-vector (tilt) | 3 | `Rᵀ·[0,0,1]`, i.e. the third row of R |
+| chassis angular velocity | 3 | straight from `qvel[ang]`, which is **already body-local** |
+| up-vector (tilt) | 3 | `Rᵀ·[0,0,1]` = third row of R |
+| **slope (downhill)** | **2** | `sinθ · [cos ψ, sin ψ]` in body frame — what an IMU reads on a slope |
 | wheel joint velocities | 4 | normalised by max ctrlrange |
 | target offset dx, dy | 2 | body frame, clipped |
 | heading error | 2 | `sin`, `cos` of `wrap(yaw_target − yaw)` |
+| **rangefinders** | **9** | ±90° fan, 3 m, normalised to [0,1]; **1.0 = clear**, MuJoCo's −1 no-hit → max |
 | previous action | 4 | keeps the action-rate penalty Markovian |
 
-(Both velocity-frame conventions above were verified numerically against `mj_objectVelocity`,
-not assumed.)
+Both velocity-frame conventions were verified numerically against `mj_objectVelocity`, not
+assumed. `--rough 0 --obstacles 0` **keeps all 32 dims** (the fan just reads constant-clear), so
+params transfer between the simple and full tasks in both directions.
 
-**Action** — one command per wheel actuator in `[-1, 1]`, affine-mapped onto each actuator's
-`ctrlrange`. `--action-mode two` collapses it to a left/right pair (true skid steer; usually
-learns faster and cannot fight itself).
+### The rangefinders are real MuJoCo sensors
 
-**Reward** — weights live in one dict, `REWARD_W` in `train.py`, and are printed at startup:
+9 `rangefinder` sensors on sites injected into the chassis at `(0.34, 0, 0.005)` — the existing
+sensor pod. Deliberately cheap: IR/ultrasonic, not lidar, which suits a £370 machine and keeps
+the observation small.
 
-| term | weight | form |
-|---|---|---|
-| `progress` | **+8.0** | `clip(d_prev − d, ±0.5)` — shaped closing speed on the target |
-| `pos` | **+1.5** | `exp(−(d/0.6)²)` — distance-to-target bump |
-| `head` | **+1.5** | `½(1+cos θ_err) · exp(−(d/0.8)²)` — heading alignment, **gated by proximity** so it only pays near the target |
-| `reach` | **+15.0** | one-off when `d < 0.35 m` **and** `\|θ_err\| < 0.5 rad`, then a new target is sampled |
-| `alive` | **+0.2** | per step |
-| `ctrl` | **−0.02** | `mean(a²)` |
-| `rate` | **−0.02** | `mean((a − a_prev)²)` — anti-chatter |
-| `energy` | **−0.005** | `mean(\|cmd\| · \|wheel speed\|)` ≈ mechanical power. This is the 30 W-vs-300 W product argument, in the loss |
-| `tip` | **−4.0** | `max(0, 0.90 − up_z)`, plus **−10.0** one-off on tip-over |
-| `spin` | **−0.3** | `max(0, \|ω_z\| − 2.5)²` — no gratuitous pirouettes |
+That mounting point matters. MuJoCo excludes only geoms in the *site's own body* from a ray cast,
+so a fan mounted at the chassis centre would see the rover's own wheels at y = ±0.40. At x = 0.34
+it does not — the front wheels only reach x = 0.20. **Verified: on an empty arena all 9 rays
+return −1.** Verified too that the target marker and rubble at maximum amplitude are never seen
+(rays sit at z ≈ 0.18 m; the marker tops out at 0.055 m and rubble at 0.07 m). That is why
+`TARGET_Z` carries a "do not raise this" comment — `contype=0` kills contacts but **not** rays.
 
-Reward is clipped to `[−25, +35]` and NaN-guarded.
-
-**Termination:** up-vector z below **0.40** (tipped), non-finite state, or the 20 s time limit.
-
-**Why `head` is gated by distance:** an ungated heading term is satisfiable by spinning on the
-spot anywhere in the arena, which competes with driving. Gating it behind `exp(−(d/0.8)²)` means
-"get there first, then point" is the only way to collect it.
-
-**Rough ground** comes from three places, none of which touch `rover.xml`: a field of `--bumps`
-small static boxes (1–3 cm proud) injected by the arena wrapper; a random roll/pitch and yaw at
-every reset; and random shoves (0.4 % of steps) to the chassis during the episode. Set
-`--bumps 0` if MJX complains about an unsupported collision pair with the real wheel geometry —
-the disturbances alone still produce a robust policy.
+`--rangefinder auto` (default) probes MJX's sensordata against CPU MuJoCo at startup and falls
+back to a closed-form ray-vs-cylinder model if MJX cannot evaluate the sensor. The fallback is
+*exact* here, not an approximation: horizontal rays against vertical posts collapse to 2-D.
 
 ---
 
-## Defaults, and why
+## Reward
 
-`4096` envs · `512` batch · `32` minibatches · `20`-step unroll · `4` updates/batch ·
-`γ = 0.995` · `lr 3e-4` · entropy `5e-3` · policy `(128,128,128)` / value `(256,256,256)` ·
-`50 M` steps.
+Weights live in `REWARD_W` and are printed at startup. Rescaled for the **measured** 0.279 m/s
+top speed — at that speed a per-step distance delta is ~5 mm, so the progress term is expressed
+as a closing **speed** and weighted to dominate.
 
-The discount is the one to leave alone: at 50 Hz a 3 m drive is ~400 steps, so `γ = 0.99`
-(≈100-step horizon) cannot see the target it is being asked to reach. Everything else is
-routine; `batch_size × num_minibatches` must stay a multiple of `--num-envs` and the script
-exits with a clear message if you break that.
+| term | weight | form |
+|---|---|---|
+| `progress` | **+2.0** | × closing speed in m/s, clipped ±0.5 → up to **+1.0/step**. The driving signal. |
+| `pos` | +1.0 | `exp(−(d/0.6)²)` |
+| `head` | +1.5 | `½(1+cos θ)·exp(−(d/0.8)²)` — **gated by proximity** |
+| `reach` | +20.0 | one-off: `d < 0.35 m` **and** `\|θ\| < 0.5 rad`, then resample |
+| `alive` | +0.05 | deliberately tiny — freezing must not pay |
+| `ctrl` / `rate` / `energy` | −0.02 / −0.05 / −0.01 | `mean(a²)`, `mean(Δa²)`, `mean(\|cmd\|·\|wheel speed\|)` ≈ power (the 8 W story) |
+| `tip` | −4.0 | `max(0, 0.90 − up_z)`, plus **−10.0** one-off on tip-over |
+| `spin` | −0.5 | `max(0, \|ω_z\| − 0.5)²`. Light: measured max turn rate is 0.571 rad/s |
+| **`collide`** | **−1.0** | per step overlapping an obstacle |
+| **`collide_depth`** | **−2.0** | × overlap depth in metres |
+| **`idle`** | **−0.3** | speed < 0.05 m/s while still > 0.8 m from the target. The anti-freeze term. |
+| `bounds` | −1.0 | × metres outside the arena |
+
+Clipped to [−25, +40] and NaN-guarded. **Collision is deliberately below progress+pos**: a rover
+in contact loses at most ~1.5/step while driving earns up to 2.0/step plus 20 per target.
+
+**Termination:** up-vector z below 0.40, non-finite state, or the 25 s limit.
+
+**Target rejection.** Eight candidate targets are sampled at once and the one with the best
+clearance to the nearest obstacle surface wins — loop-free, so it stays jittable. Targets inside
+or immediately behind an obstacle lose, which is what keeps the task solvable.
+
+Collision is measured geometrically (rover radius 0.51 m, computed from the model, vs each
+obstacle's radius) rather than by introspecting MJX's contact arrays. That is version-proof and
+gives a graded depth for free; the physics still does the real stopping.
+
+---
+
+## Curriculum
+
+`u = rough · clip(t_env / (curriculum_frac · steps_per_env), 0, 1)`, where `t_env` is **each
+env's own cumulative step count**, kept in `state.info`.
+
+This works precisely because **brax's auto-reset never calls `reset()`** — it restores
+`pipeline_state` and leaves `info` alone. So the counter survives episode boundaries and is a
+faithful proxy for global training progress with no plumbing into the PPO loop.
+
+| at difficulty `u` | 0.0 | 1.0 |
+|---|---|---|
+| rubble proud height | `rough · 0.015 m` | `rough · 0.070 m` |
+| rubble density | 25 % of a 16-box pool | 100 % |
+| obstacles active | 0 (they start at `u = 0.15`) | 8 |
+| slope | 0° | **12°** |
+| push disturbance | 0.002 /step | 0.008 /step |
+
+Default ramp is the first **60 %** of training (`--curriculum-frac`). `--rough` caps the top end;
+`--rough 0` is flat ground forever.
+
+### Everything variable is a MOCAP body
+
+Model geometry is shared across all envs and cannot ramp. **Mocap poses live in `mjx.Data`**, so
+they are per-env and settable inside a jitted step. Rubble amplitude is controlled by **burial
+depth** (fixed 0.05 m half-height boxes, z set to `−0.05 + proud`); inactive bodies are parked at
+z = −50. The layout is re-applied from `info` on **every** step, because auto-reset would
+otherwise restore the very first episode's layout forever.
+
+### ⚠️ Slopes are a body force, not tilted geometry — and it is a 2 % approximation
+
+No cliff-free ≤12° ramp can be built from box primitives at a 0.22 m wheelbase: every finite
+tilted box has a vertical face, and a tile long enough to hide it is metres across. So a slope is
+simulated as a constant horizontal force `m·g·sin θ` on the chassis, with the downhill direction
+fed to the policy in body frame.
+
+**This is dynamically exact apart from the normal-force term.** On a real slope the normal force
+is `m·g·cos θ`; here it stays `m·g`. At the 12° cap that is a **2 % error in available traction**,
+which flatters the rover slightly. Everything else — the downhill pull, the friction budget, the
+IMU reading — is right. Do not later mistake this for a geometrically modelled slope.
+
+**The 12° cap is a hard limit, not a tuning knob.** The rover climbs 14°, stalls at 16° and noses
+over at 30.5°. Steeper is not "hard", it is impossible, and it teaches helplessness.
+
+---
+
+## Physics settings — two deliberate, measured trades
+
+### 1. `--physics-dt 0.004` (rover.xml authors 0.001)
+
+A 4× cut in MJX substeps per control step, 20 → 5. **This is a fidelity trade, taken knowingly.**
+Measured on flat ground against the vehicle's own numbers:
+
+| timestep | solver | substeps | top speed | turn rate | verdict |
+|---|---|---|---|---|---|
+| 0.001 | 2/6 | 20 | 0.276 | 0.475 | stable, slow |
+| 0.002 | 2/6 | 10 | 0.276 | 0.567 | stable |
+| **0.004** | **2/6** | **5** | 0.276 | **2.433** | **UNSTABLE — the rover flips during a spin** |
+| **0.004** | **4/10** | **5** | **0.276** | **0.536** | **stable — the default** |
+| 0.005 | 2/6 | 4 | — | 0.847 | diverges, rover ends up inverted |
+
+*(spec: 0.279 m/s, 0.571 rad/s)*
+
+### 2. Solver `4/10`, not `2/6`
+
+That table is the whole reason. At 4 ms substeps the cheap solver makes a full-command spin
+**diverge to 2.4 rad/s and flip the rover** — which would have silently taught the policy that
+turning is fatal. Skid-steer yaw is friction-scrub dominated and is by far the most
+timestep-sensitive thing in this model. 4/10 reproduces the measured turn rate within 7 %, is
+stable through 60 s of aggressive random control over max-amplitude rubble, and is still
+**3.6× faster** than 20 substeps at 2/6. The script warns if you lower these with a large
+timestep. **Re-run a spin test before changing either.**
+
+Also applied: cone `elliptic → pyramidal` (markedly faster and steadier in MJX).
+
+### 3. Contact filtering (`--no-contact-filter` to disable)
+
+Rover geoms get `contype=ROVER/conaffinity=WORLD`, static geoms the mirror image. Rover-vs-ground
+and rover-vs-terrain are unaffected; **terrain-vs-terrain and terrain-vs-ground stop being tested
+at all** — with 24 terrain bodies that is ~300 dead pairs per step. Rover self-collision also
+goes, but the parent/child rule already excluded it (the wheels are children of the chassis).
+
+Verified physics-neutral: filter on vs off gives an identical settled height (0.00 mm difference)
+and identical speed. `--no-contact-filter` exists so contact behaviour can be bisected if
+anything ever looks wrong.
+
+---
+
+## Honest training time, and what to cut
+
+**~15–25 minutes on one RTX PRO 6000** for good pose tracking plus *cautious* obstacle behaviour
+(slows, drifts around posts, occasional clip) — not confident avoidance. Three costs stacked at
+once: 5 MJX substeps per control step, ~8 rover geoms × 25 terrain geoms of collision pairs, and
+a genuinely harder task than pose tracking alone.
+
+**Cut list, in priority order.** This is the thing to reach for under deadline pressure:
+
+1. `--rubble 8 --obstacles 6` — fewer collision pairs, the single biggest lever
+2. `--physics-dt 0.005 --episode-seconds 20` — *only with `--solver-iters 6 --ls-iters 12`;*
+   0.005 at 2/6 diverges (see the table)
+3. `--action-mode two` — 2-dim action space, genuinely easier and skid-steer-correct
+4. Set `SLOPE_MAX_DEG = 0` — least visible thing in the video
+5. Last resort: `--rough 0 --obstacles 0 --rubble 0` and ship the pose tracker that trains in
+   ~10 minutes
+
+---
+
+## Degenerate solutions, and the term that blocks each
+
+| behaviour | why it is tempting | what blocks it |
+|---|---|---|
+| **freeze** | never moving means zero collisions, and collision is the only large negative | `alive` cut to +0.05, plus the explicit **`idle` −0.3** when stopped > 0.8 m out. Driving pays up to +2.0/step and +20/target — an order of magnitude more. |
+| **circle / pirouette** | heading reward looks farmable by spinning | `head` is gated by `exp(−(d/0.8)²)` so it only pays near the target; `progress` pays nothing for circling; `spin` on top |
+| **wall-hug** | rangefinders read clear along a boundary | no walls exist; `bounds` penalises leaving the arena; targets are always sampled inside |
+| **creep** | crawling avoids both collisions and tipping | `progress` is a **speed**, so crawling earns proportionally less; the +20 reach bonus rewards throughput |
+| **farm the reach bonus in place** | +20 repeatedly at one spot | on reach the target immediately resamples 0.8–2.5 m away |
+| **sun-parking** | — | no sun term exists anywhere, by design |
+
+---
+
+## Verified on this machine (CPU, against the real `rover.xml`)
+
+`python -m py_compile` passes; `pyflakes` clean. No GPU here, so MJX/JAX paths are unverified.
+
+- **MjSpec surgery** on the real model: +9 rangefinders, +1 marker, +16 rubble, +8 obstacles.
+  `rover.xml` untouched. (Gotcha found: rangefinder sensors need `intprm[0] ≥ 1` or `compile()`
+  raises `data spec (intprm[0]) must be positive`.)
+- **Contact filter does not break rover-vs-ground**: `ncon = 8`, all eight are ground-vs-tyre
+  (two per wheel), settled z = 0.1750 against a 0.175 spawn. No sinking, no fall-through.
+- **Rangefinders**: post at (1.9, 0) r=0.13 → centre ray 1.433 m vs 1.43 predicted; second post
+  at (1.3, −0.9) → the −45° ray at 1.012 m. Empty arena → all −1. Marker invisible at 15 tested
+  placements; rubble at max amplitude invisible.
+- **Escape hatch** `--rough 0 --obstacles 0 --rubble 0` builds, `nmocap = 1`, all 9 rays read
+  3.0 m, **obs dim still 32**.
+- **Timestep/solver sweep** as tabled above, plus 3 × 20 s of aggressive random control over
+  max-amplitude rubble at the chosen settings: no flips, peak yaw 0.61 rad/s.
+- **Render**: 1280×720, non-black (mean 99), chase camera and the model's `hero` camera both work.
 
 ## Known risks
 
-1. **sm_120 wheels.** Covered above; the script fails fast rather than training on CPU.
-2. **MJX collision coverage.** If the real wheels are cylinders and MJX has no cylinder-vs-box
-   pair, `--bumps 0` is the escape hatch. The startup banner prints the geom inventory.
-3. **`rover.xml` contents are assumed, not seen.** The script resolves the chassis by the free
-   joint (preferring a body literally named `chassis`) and the wheels/actuators by name, with
-   loud fallbacks to "first free joint" and "all hinge joints". Check those two banner lines on
-   the first run.
-4. **Headless rendering.** `MUJOCO_GL=egl` is set before MuJoCo is imported. If the VM has no
-   EGL, use `MUJOCO_GL=osmesa python train.py --rollout`. The script warns if every frame is
-   black rather than silently shipping a black video.
+1. **sm_120 wheels.** The script fails fast rather than training on CPU.
+2. **MJX rangefinder support is version-dependent.** `--rangefinder auto` probes it against CPU
+   MuJoCo at startup and falls back to the analytic model, which is exact for this geometry.
+3. **MJX collision coverage** for cylinder-vs-box pairs. `--rubble 0 --obstacles 0` is the escape
+   hatch; the startup banner prints the geom inventory.
+4. **Headless rendering.** `MUJOCO_GL=egl` is set before MuJoCo imports; `osmesa` is the
+   fallback. The script warns if every frame is black rather than shipping a black video.
+5. **The 2 % slope traction approximation** above — flatters the rover very slightly.
