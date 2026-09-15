@@ -355,17 +355,12 @@
       <geom class="visual" name="busbar_a" type="box" size="0.445 0.004 0.0085" pos="0 0.165 0.1235" material="pv_frame"/>
       <geom class="visual" name="busbar_b" type="box" size="0.445 0.004 0.0085" pos="0 -0.165 0.1235" material="pv_frame"/>
 
-      <!-- ---- BATTERY, slung underneath, between the wheels ----
-           0.20 (fore-aft) x 0.45 (across) x 0.055 m = 4.95 L for 500 Wh
-           (~101 Wh/L, a realistic cased LiFePO4 pack). A wide flat slab: the
-           0.22 m wheelbase leaves no fore-aft room, and a wide pack is an easier
-           target for the dock. 20 mm of clearance to each wheel's inner face.
-           Top face bolts to the deck underside at z_local = -0.060; bottom face
-           sits 0.060 m above the ground - the lowest point on the machine. -->
-      <geom name="battery" type="box" size="0.10 0.225 0.0275" pos="0 0 -0.0875"
-            material="battery" mass="4.0" friction="0.4 0.005 0.0001"/>
-      <geom class="visual" name="batt_strap_l" type="box" size="0.012 0.227 0.030" pos="0.06 0 -0.0875" material="body_dark"/>
-      <geom class="visual" name="batt_strap_r" type="box" size="0.012 0.227 0.030" pos="-0.06 0 -0.0875" material="body_dark"/>
+      <!-- ---- BATTERY: NOT HERE ANY MORE ----
+           The pack used to be three geoms of this body. It is now its own body
+           "pack" (see below, after </body>), held on by the weld equality
+           "pack_latch". Nothing about its pose, size or mass changed - only its
+           ownership - because a geom cannot be detached and a swap dock has to
+           be able to take the pack off. See the PACK block below. -->
 
       <!-- 7. SITES -->
       <!-- panel_normal: on the glass, +Z of this site IS the panel normal.
@@ -373,8 +368,13 @@
            Sun exposure later = dot(site z-axis, sun direction), and because the
            panel is bolted flat, that dot product is a pure function of body
            yaw and the sun vector. Sensor "panel_normal_world" reads it out. -->
-      <site name="panel_normal" type="cylinder" fromto="0 0 0.131 0 0 0.231"
-            size="0.008" material="site_hi" group="1"/>
+      <!-- NOTE: declared with an EXPLICIT zaxis, not fromto. A fromto-built
+           cylinder site compiled here with its frame Z pointing DOWN, which
+           silently negated dot(site_z, sun) - i.e. every exposure reading would
+           have come out backwards. Verified: this form gives world +Z = (0,0,1)
+           with the rover upright. Do not "simplify" it back to fromto. -->
+      <site name="panel_normal" type="cylinder" pos="0 0 0.181" zaxis="0 0 1"
+            size="0.008 0.05" material="site_hi" group="1"/>
       <!-- battery_mount: on the UNDERSIDE face of the pack, z-axis pointing
            DOWN at the dock. Frame is (x fwd, y right, z down) - a dock driving
            under the rover sees +Z coming at it. -->
@@ -425,6 +425,57 @@
       </body>
     </body>
 
+    <!-- =====================  BATTERY PACK  =====================
+         0.20 (fore-aft) x 0.45 (across) x 0.055 m = 4.95 L for 500 Wh
+         (~101 Wh/L, a realistic cased LiFePO4 pack). A wide flat slab: the
+         0.22 m wheelbase leaves no fore-aft room, and a wide pack is an easier
+         target for the dock. The 0.80 m track leaves 145 mm of clear air to
+         each wheel's inner face, so a dock can come in from either side.
+         Top face bolts to the deck underside at z = 0.115; bottom face sits
+         0.060 m above the ground - the lowest point on the machine.
+
+         WHY THIS IS ITS OWN BODY (15 Sep 2026). It used to be three geoms of
+         the chassis, and a geom cannot be detached: any force on it moves the
+         whole 29.4 kg rover, so "swap the battery" was not representable at
+         all. It is now a free body held by the weld equality "pack_latch"
+         below, and the latch is released at runtime with
+             data.eq_active[mj_name2id(m, mjOBJ_EQUALITY, "pack_latch")] = 0
+         (or model.eq_active0 at compile time). That single byte is the whole
+         difference between a real swap and an animation.
+
+         NOTHING ELSE MOVED. Pack centre is still world (0, 0, 0.0875), pack
+         underside still 0.060, mass still 4.0 kg, straps still hang to 0.0575,
+         and with the weld ACTIVE the loaded CoG, tip angles, speed, turn rate
+         and climb limit are all unchanged - the body split is a change of
+         ownership, not of physics.
+
+         THREE CONSEQUENCES FOR ANYONE BUILDING ON THIS MODEL:
+           1. nq 11 -> 18, nv 10 -> 16, nbody 6 -> 7. nu is still 4.
+              qpos layout: [0:7] chassis free, [7:11] wheels, [11:18] pack free.
+           2. THIS FILE IS STILL AUTHORED AT THE ORIGIN, and the pack is a
+              SECOND root body. Anything that teleports the rover by writing
+              qpos[0:7] MUST write qpos[11:18] to match, or the weld will snap
+              them together violently on the first step. mj_resetDataKeyframe
+              with the "home" key below does the right thing.
+           3. body_subtreemass("chassis") is now 25.4 kg, not 29.4. Code that
+              wants the whole machine should sum chassis + pack (or use
+              mj_getTotalmass minus anything else in the scene).
+
+         The contact exclude below stops the pack's top face (z = 0.115) and the
+         shell's bottom face (z = 0.115) generating a permanent zero-gap contact
+         now that they are separate bodies. The weld is what holds them. -->
+    <body name="pack" pos="0 0 0.0875">
+      <freejoint name="pack_free"/>
+      <geom name="battery" type="box" size="0.10 0.225 0.0275" pos="0 0 0"
+            material="battery" mass="4.0" friction="0.4 0.005 0.0001"/>
+      <!-- Retaining straps travel WITH the pack - they are its bands, not the
+           rover's. They protrude 2.5 mm below the pack to z = 0.0575, so they,
+           not the pack, are the true lowest point on the machine, and a dock
+           carriage rising flat meets them first. -->
+      <geom class="visual" name="batt_strap_l" type="box" size="0.012 0.227 0.030" pos="0.06 0 0" material="body_dark"/>
+      <geom class="visual" name="batt_strap_r" type="box" size="0.012 0.227 0.030" pos="-0.06 0 0" material="body_dark"/>
+    </body>
+
     <!-- 8. CAMERAS - all aimed at the chassis body so they stay framed even if
          you nudge the rover's start pose. -->
     <!-- three-quarter hero: front-right-high, the classic product shot. Sees the
@@ -440,6 +491,27 @@
     <!-- plan view for panel-aim / lane-coverage overlays -->
     <camera name="top" pos="0.01 -0.30 2.60" mode="targetbody" target="chassis" fovy="45"/>
   </worldbody>
+
+  <!-- The pack is welded to the chassis, so a contact between them is a solver
+       fight over the same constraint. Exclude it: with the weld off the pack is
+       leaving anyway, and with it on the weld is what holds the pack. -->
+  <contact>
+    <exclude name="pack_shell" body1="chassis" body2="pack"/>
+  </contact>
+
+  <!-- ======================  THE LATCH  ======================
+       relpose is stated explicitly rather than inherited from the compile-time
+       pose: (0, 0, -0.0875) is the pack origin in chassis coordinates, i.e. the
+       pack hangs 87.5 mm under the deck centre, and the identity quaternion
+       keeps it square to the body. Anything that re-latches a DIFFERENT pack
+       (a dock offering a fresh one) welds to this same relative pose and the
+       machine comes out identical to how it went in.
+       Default solref/solimp: a slightly compliant latch is honest for a
+       mechanically clamped pack and does not ring. -->
+  <equality>
+    <weld name="pack_latch" body1="chassis" body2="pack"
+          relpose="0 0 -0.0875 1 0 0 0" active="true"/>
+  </equality>
 
   <!-- ======================  ACTUATORS  ======================
        3. Velocity servos, one per wheel. ctrl is in JOINT rad/s.
@@ -494,33 +566,38 @@
 
        kv = 18 Nm per rad/s of error: a soft, slow, torquey servo rather than a
        snappy one, consistent with a cheap high-reduction gearmotor. It hits the
-       2.7 Nm limit at 0.15 rad/s of droop and holds cruise speed to ~1%. NOTE it
+       2.4 Nm limit at 0.13 rad/s of droop and holds cruise speed to ~1%. NOTE it
        is still stiff enough to reach top speed in a fraction of a second, which
        no real gearmotor does - the behaviour layer should ramp ctrl over ~1 s.
 
-       forcerange +/-2.7 Nm - MODEST BY DESIGN, and the number that enforces the
-       low-power thesis:
-         total tractive force = 4 * 2.7 / 0.09 = 120 N absolute maximum
-         envelope corner      = 4 * 2.7 * 3.1416 = 33.9 W mechanical
-         i.e. the drivetrain PHYSICALLY CANNOT exceed ~30 W of motion. It cannot
-         accelerate hard and it cannot climb a serious slope: tractive force
-         after the 0.60 Nm rolling loss is 4*(2.7-0.6)/0.09 = 93 N against 288 N
-         of weight, predicting 19 deg, and measurement gives 15 deg climbed /
-         18 deg stalled once slope rolling drag is counted. That is the intended
-         character of the machine, not a defect.
+       forcerange +/-2.4 Nm - MODEST BY DESIGN, and the number that enforces the
+       low-power thesis. It comes straight out of the budget rather than being
+       reverse-fitted:
+         30 W of motion at 0.28 m/s  = 107 N of tractive force, all four wheels
+         107 N * 0.09 m / 4 wheels   = 2.4 Nm per wheel
+       and checking it the other way round:
+         total tractive force = 4 * 2.4 / 0.09 = 106.7 N absolute maximum
+         envelope corner      = 4 * 2.4 * 3.1416 = 30.2 W mechanical
+       i.e. max torque at max speed lands exactly on the 30 W thesis: the
+       drivetrain PHYSICALLY CANNOT exceed it. It cannot accelerate hard and it
+       cannot climb a serious slope: tractive force after the 0.60 Nm rolling
+       loss is 4*(2.4-0.6)/0.09 = 80 N against 288 N of weight, predicting
+       16.1 deg, and measurement gives 14 deg climbed at 0.271 m/s / 16 deg
+       stalled. That is the intended character of the machine, not a defect.
        Measured real draw:
          travel 0.28 m/s   8.2 W mech ~= 16 W electrical @50%  - inside budget
          harvest 0.12 m/s  3.3 W mech ~=  7 W electrical       - inside budget
-         spin in place    25.5 W mech ~= 50 W electrical       - OVER budget
+         spin in place    20.6 W mech ~= 41 W electrical       - OVER budget
        THE CAVEAT TO CARRY INTO THE ENERGY MODEL: scrub steering is expensive and
-       a spin-in-place transiently costs ~3x the cruise draw. It is inside the
-       500 Wh battery by a mile - a 90 deg turn takes 2.4 s and costs 0.03 Wh -
+       a spin-in-place transiently costs ~2.5x the cruise draw. It is inside the
+       500 Wh battery by a mile - a 90 deg turn takes 2.7 s and costs 0.031 Wh -
        but bill turns separately rather than assuming a flat 30 W.
-       Why 2.7 and not the 2.4 Nm that the 30 W/0.28 m/s arithmetic suggests:
-       below ~2.5 Nm the rover stops turning altogether rather than turning
-       slowly (it cannot break stiction), and 2.4 Nm failed outright on firmer
-       grass (mu 0.7) and with a 5 kg harvest payload aboard. 2.7 Nm is the
-       smallest ceiling that still turns with margin in all three cases. -->
+       This ceiling was 2.7 Nm at the old 0.56 m track and could not be lowered:
+       2.4 Nm there fell off the stiction cliff and the rover stopped turning
+       entirely on firm grass (0.016 rad/s) or with a payload (0.014 rad/s). The
+       0.80 m track fixed that - 2.4 Nm now turns across mu 0.60-0.80 and with
+       10 kg aboard - so widening the track is what bought the honest 30 W
+       number. Do not raise this ceiling back up without re-reading the header. -->
   <actuator>
     <velocity name="mot_fl" joint="wheel_fl" kv="18" ctrlrange="-3.1416 3.1416" forcerange="-2.4 2.4"/>
     <velocity name="mot_fr" joint="wheel_fr" kv="18" ctrlrange="-3.1416 3.1416" forcerange="-2.4 2.4"/>
@@ -539,7 +616,10 @@
   </sensor>
 
   <keyframe>
-    <!-- parked flat at the origin, wheels at rest -->
-    <key name="home" qpos="0 0 0.175 1 0 0 0  0 0 0 0" ctrl="0 0 0 0"/>
+    <!-- parked flat at the origin, wheels at rest, pack latched under the deck.
+         Layout: chassis free [0:7] | wheels [7:11] | pack free [11:18]. -->
+    <key name="home"
+         qpos="0 0 0.175 1 0 0 0  0 0 0 0  0 0 0.0875 1 0 0 0"
+         ctrl="0 0 0 0"/>
   </keyframe>
 </mujoco>
