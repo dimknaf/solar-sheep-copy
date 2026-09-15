@@ -54,29 +54,75 @@ never from memory.
 
 ---
 
-## ⚠️ The blocker nobody has cleared yet
+## 🎯 START FROM NEBIUS'S OWN REPO — do not build this from scratch
 
-**None of us has an NVIDIA GPU.** Every workstream depends on cloud GPU access that does not exist
-yet. The $25 + $25 hackathon credits are **Token Factory (inference)** — do not assume they cover
-GPU hours. **C owns clearing this in the first 48 hours.**
+**https://github.com/nebius/nebius-physical-ai** (Apache-2.0)
 
-And it is narrower than "rent a GPU". Straight from the Isaac Sim 6.1 requirements page:
+Nebius maintains an official control plane for exactly this track, and it already contains the two
+things we were going to spend three weeks building:
 
-> **"GPUs without RT Cores (A100, H100) are not supported."**
+- **`docs/workbench/guides/quadruped-isaac-lab.md`** — "Train a Quadruped to Run in Isaac Lab".
+  ANYmal-C velocity policy, RSL-RL, headless, with eval gates. Reusable almost directly for our
+  vehicle:
+  ```bash
+  npa workbench isaac-lab train --task Isaac-Velocity-Rough-Anymal-C-v0 --num-envs 2048 --steps 500
+  npa workbench isaac-lab eval  --task ... --success-metric survival --min-success-rate 0.90
+  npa workbench isaac-lab export-onnx
+  ```
+- **`docs/hackathon-isaac-token-factory.md`** — the Isaac Lab → Token Factory bridge. Sim frames to
+  S3, an NVIDIA model reads them and emits a plan. Literally our architecture, already written:
+  ```
+  [ Isaac Lab GPU stage ] --PNG frames--> [ S3 ] --> [ Token Factory reasoner ] --> plan.json
+  ```
 
-So the default datacentre GPU everyone reaches for **will not run our simulator**. We need
-**RTX PRO 6000 Blackwell** (explicitly blessed by NVIDIA, and Nebius lists it) or **L40S** (Ada,
-has RT cores — should work, but NVIDIA never names it, so **test it on day 1 rather than assuming**).
+**So our differentiation is not the plumbing — it is the solar-panel task design, the battery-swap
+dock, and the fleet orchestration.** That is a much better place to spend 44 days, and building on
+the sponsor's own repo scores directly against "Technological Implementation".
 
-**Pre-agreed fallback, so we don't relitigate it at week three:** if Isaac Sim on Nebius is blocked
-or too expensive, train in **MuJoCo Playground** and use Isaac Sim only for the final render pass.
-The interfaces in [`CONTRACTS.md`](CONTRACTS.md) are written so this swap costs us nothing.
+Also in there: `docs/agent.md`, `docs/cli/groot.md`, `docs/cli/cosmos3.md`, `docs/cli/mjlab.md`,
+`docs/workbench/composing-cloud-and-token-factory.md`.
 
-## Versions — pin these, do not improvise
+## ✅ The GPU question — mostly answered already
 
-**Isaac Lab 2.3.2 + Isaac Sim 5.1.0.** Isaac Lab 3.0 exists but is **beta**, still landing breaking
-changes; a beta install failure costs a week we do not have. Verify what you actually install and
-pin that — never pin a version from memory.
+**Isaac Lab needs RT cores.** From Nebius's *own* repo, not just NVIDIA's docs:
+
+> "**RT cores are mandatory.** L40S or RTX PRO 6000 only. H100/H200 lack RT cores and won't
+> render/simulate Isaac Lab correctly."
+
+> "No RT cores on datacenter Blackwell, same as H100/H200… this is a **hardware fact rather than a
+> software gap that will be fixed**."
+
+So provision **`gpu-l40s-d`** (~$0.74/hr preemptible, $1.55 on-demand, `eu-north1`) or
+**`gpu-rtx6000`** (~$0.95 preemptible, $1.80 on-demand). **Never H100/H200/B200/B300** — only
+state-based headless training can route there.
+
+### 💸 The cost reality — this is the real blocker now
+
+**Our credits do not pay for GPU.** The `NEBIUS-DEVPOST-GLOBAL26` code is
+`utm_promo_code_type=Token_Factory` — inference only. And:
+
+> "The free trial program in Nebius AI Cloud has been suspended as of July 13, 2026."
+
+Budget real money: **40 GPU-hours ≈ $30 on L40S preemptible, ≈ $72 on RTX PRO 6000 on-demand.**
+Manageable, but someone has to put a card on the account. C: ask the booth whether any AI Cloud
+credits exist for this event — none are documented publicly.
+
+**Fallback if that's unacceptable:** train in **MuJoCo Playground** (Go1 joystick policy in ~7 min
+on one GPU, no RT cores needed) and rent an L40S only for the final render pass. The interfaces in
+[`CONTRACTS.md`](CONTRACTS.md) make this swap free.
+
+## Versions and gotchas — pin these, do not improvise
+
+- Nebius's repo pins **Isaac Lab `v3.0.0-beta2.patch1` + Isaac Sim `6.0.1.0`**. It is a beta;
+  follow *their* pin rather than inventing one, since their images are built against it.
+  Gen-3 training uses `--visualizer none`, **not** `--headless` (that's gen-2 only).
+- Container is **GHCR, not NGC**: `ghcr.io/nebius/nebius-physical-ai/npa-isaac-lab`. No NGC
+  credentials needed. The Isaac runtime downloads on first use — **pre-warm the cache**, or your
+  first run looks broken.
+- **Windows users must work in WSL2 Ubuntu.** The `npa` CLI is not Windows-native.
+- ⚠️ **`nvidia/Nemotron-3_5-Lightning` burns its entire output budget on reasoning** unless you
+  pass `chat_template_kwargs={"enable_thinking": False}`. Nebius measured 506 of 512 tokens spent
+  on reasoning, returning truncated JSON. This will look like a bug in your code and is not.
 
 ---
 
