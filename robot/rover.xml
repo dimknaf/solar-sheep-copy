@@ -23,10 +23,12 @@
        results, 8 s runs, steady-state averages:
          ctrl 3.1416 on all four  -> 0.279 m/s   (target 0.28)
          ctrl 1.333 on all four   -> 0.117 m/s   (target 0.12)
-         ctrl -/+3.1416 diff.     -> 0.664 rad/s (target 0.6, and this is the
-                                     FULL ctrl range - see the turning note)
+         ctrl -/+3.1416 diff.     -> 0.571 rad/s (target 0.6 - 5% under, and it
+                                     uses the FULL ctrl range: see TURNING)
          travel costs  8.2 W mechanical ~= 16 W electrical  (budget 30 W)
-         spin costs   25.5 W mechanical ~= 50 W electrical  (see caveat below)
+         spin costs   20.6 W mechanical ~= 41 W electrical  (see caveat below)
+         climbs 14 deg at 0.271 m/s; stalls at 16 deg
+         cross-slope: holds flat to 33 deg, slides away at 36, never tips
 
        ---- CHOSEN DIMENSIONS, one line of reasoning each -------------------
        wheel radius   r = 0.090 m  : 180 mm barrow wheel, the cheapest size that
@@ -44,10 +46,16 @@
                                      no torque to spare. At 0.28 m the same rover
                                      measured 0.011 rad/s - it could not turn at
                                      all. See the turning note in ACTUATORS.
-       track            0.560 m    : wheel centres at y = +/-0.28. Yaw authority
-                                     scales with track, so track/wheelbase = 2.5.
-                                     A wide track also braces the overhung panel
-                                     and gives a 56 deg roll-tip angle.
+       track            0.800 m    : wheel centres at y = +/-0.40, i.e. right out
+                                     under the rim of the panel it already
+                                     carries - the wheels sit 49 mm INSIDE the
+                                     glass edge, so the machine got no wider
+                                     overall and still reads tidy from above.
+                                     track/wheelbase = 3.6.
+                                     Widening from 0.56 m was asked for on
+                                     stability grounds and it delivers, but not
+                                     the way you would expect - see TRACK WIDTH:
+                                     WHAT IT BOUGHT below. Roll-tip 65 deg.
        chassis box      0.56 x 0.46 x 0.12 m : a crate, not a car. Overall length
                                      including the panel overhang is 0.90 m, in
                                      the requested 0.6-0.9 m band, and it drives
@@ -61,8 +69,10 @@
        => 0.90 m^2 of module.  Modelled as 0.90 m (fore-aft) x 1.00 m (lateral)
        = 0.900 m^2 exactly.  A 20%-efficient module would need 1.0 m^2.
        THE PANEL OVERHANGS THE CHASSIS AND THAT IS DELIBERATE AND REALISTIC:
-       0.17 m fore and aft beyond the 0.56 m body, and 0.19 m each side beyond
-       the 0.62 m over-wheels width. Real solar rovers and solar mowers all look
+       0.17 m fore and aft beyond the 0.56 m body, and 0.07 m each side beyond
+       the 0.86 m over-wheels width - the panel is now very nearly the exact
+       plan-view silhouette of the machine, which is the tidiest a solar rover
+       can look. Real solar rovers and solar mowers all look
        like this - the panel is the biggest, cheapest part and the chassis is
        sized by the battery and drivetrain, not by the panel. The overhang also
        shades the body, which helps the electronics.
@@ -83,18 +93,22 @@
 
        ---- WHY THE BATTERY HANGS UNDERNEATH --------------------------------
        The 4 kg pack is slung below the deck, between the wheels (0.20 m fore-aft
-       inside the 0.22 m wheelbase, 0.45 m across inside the 0.50 m between wheel
+       inside the 0.22 m wheelbase, 0.45 m across inside the 0.74 m between wheel
        inner faces). It is a wide flat slab, not a brick, because the short
        wheelbase leaves no fore-aft room - and a wide flat pack is easier for a
        ground dock to catch anyway. Two reasons, both intentional:
          1. Low CoG. MuJoCo computes the loaded CoG at z = 0.1865 m; against the
-            0.28 m half-track that is a 56.3 deg static roll-tip angle. Move the
+            0.40 m half-track that is a 65.0 deg static roll-tip angle. Move the
             same pack up onto the deck and the CoG rises to ~0.202 m and the tip
-            angle drops to ~54 deg. Only a couple of degrees, but it is free, and
+            angle drops to ~63 deg. Only a couple of degrees, but it is free, and
             it counteracts the 9 kg of glass sitting 0.30 m up.
-            The number that actually matters: tyre friction is 0.65, so the
-            machine SLIDES at a 33 deg cross-slope and would only TIP at 56 deg.
-            Sliding before tipping is the failure mode you want.
+            The number that actually matters, and it is NOT the tip angle: tyre
+            friction is 0.65, so the machine SLIDES at a 33 deg cross-slope and
+            would only TIP at 65 deg. Measured: parked across a 33 deg slope it
+            creeps 10 mm and stays perfectly flat; at 36 deg it slides away
+            without ever lifting a wheel. Sliding before tipping is the failure
+            mode you want, and this machine cannot reach its tipping angle on
+            any surface it can stay parked on.
          2. Swap-from-below docking. Site "battery_mount" is on the underside
             face of the pack so a ground dock can drive under, unlatch and drop
             the pack straight down without touching the panel.
@@ -102,12 +116,54 @@
          - The pack is the limiting ground clearance at 60 mm. Fine on mown or
            grazed pasture, not fine in long grass.
          - The short wheelbase costs PITCH stability: half-wheelbase 0.11 against
-           a CoG 0.1865 up is only a 30.5 deg nose-over angle. It is safe only
-           because the drivetrain is too weak to climb that far: measured, the
-           rover climbs 15 deg at 0.270 m/s and stalls at 18 deg, so it can never
-           reach the angle that would tip it. Do not hand this machine a ramp
-           steeper than ~15 deg, and note that above its climb limit it does not
-           just stop - it slides back down, wheels still turning.
+           a CoG 0.1865 up is only a 30.5 deg nose-over angle, and the wide track
+           does nothing for that axis. It is safe only because the drivetrain is
+           too weak to climb that far: measured, the rover climbs 14 deg at
+           0.271 m/s and stalls at 16 deg, so it can never reach the angle that
+           would tip it forward. Do not hand this machine a ramp steeper than
+           ~14 deg, and note that above its climb limit it does not just stop -
+           it slides back down, wheels still turning. Pitch, not roll, is now the
+           weak axis by a factor of two.
+
+       ---- TRACK WIDTH: WHAT IT BOUGHT (and what it cost) -------------------
+       The track was widened 0.56 -> 0.80 m for stability. It paid, but not on
+       the axis anyone expected, so the measurements are worth recording.
+
+       EXPECTED: better roll stability. TRUE BUT LARGELY MOOT. Roll-tip improved
+       56.3 -> 65.0 deg. The machine never tips at either width, because at
+       mu = 0.65 it slides off a 33-36 deg cross-slope long before geometry
+       matters. The widening improved a margin that was not binding.
+
+       EXPECTED: more yaw authority, because differential thrust acts on a longer
+       arm, so maybe a faster turn. HALF TRUE, AND THE HALF THAT IS FALSE IS THE
+       TURN RATE. Yaw has two separate limits:
+         - TORQUE limit (can the motors break the wheels loose at all?). The
+           longer arm helps exactly as expected, and this is where the win is.
+         - SPEED limit (how fast can the wheels feed the turn?), which sets the
+           top yaw rate:   yaw_max ~= v_max / [ (T/2) + (L/2)^2/(T/2) ]
+           Wheel radius and motor rpm cancel out of that expression; only top
+           speed and TRACK appear. A wider track therefore makes the top yaw rate
+           WORSE at fixed road speed, because each wheel must cover more ground
+           per degree of turn.
+       Measured, at 2.4 Nm:  track 0.56 -> 0.650 rad/s;  0.80 -> 0.571 rad/s.
+       So widening cost ~12% of the turn rate and pushed it 5% under the 0.6
+       target. That is the trade, stated plainly.
+
+       WHAT IT ACTUALLY BOUGHT, and it is worth far more than the 12%: the wide
+       track removed a stiction CLIFF. Skid-steer turning does not degrade
+       gracefully - below a torque threshold the wheels never break loose and the
+       rover simply does not turn at all. At track 0.56 m the machine needed
+       2.7 Nm and still fell off that cliff when conditions hardened:
+             track 0.56, 2.4 Nm, firm grass (mu 0.8) -> 0.016 rad/s  (LOCKED)
+             track 0.56, 2.4 Nm, +5 kg payload       -> 0.014 rad/s  (LOCKED)
+       At track 0.80 m the same 2.4 Nm turns in every case tested:
+             mu 0.60 / 0.65 / 0.70 / 0.80 -> 0.581 / 0.571 / 0.558 / 0.516
+             +5 kg payload -> 0.523,  +10 kg payload -> 0.521
+       That let the motor ceiling drop 2.7 -> 2.4 Nm, which puts the drivetrain
+       back inside the honest 30 W envelope (see ACTUATORS), AND it cut the cost
+       of a turn from 25.5 W to 20.6 W mechanical, because a longer moment arm
+       needs less force. For a harvesting rover whose mass grows through the day,
+       margin against that cliff is worth more than 0.03 rad/s of turn rate.
        ========================================================================== -->
 
   <compiler angle="radian" coordinate="local" inertiafromgeom="auto" meshdir="." autolimits="true"/>
@@ -184,13 +240,17 @@
            sliding coefficient, so lateral scrub costs exactly what longitudinal
            slip costs, and differential thrust can rotate the machine.
            0.65 = rubber on real pasture grass, which is slippery - it is why
-           mowers slide. It was tuned against measurements, not picked, and with
-           a 30 W drivetrain the tuning window is narrow: scrub torque scales
-           directly with mu, so at 0.80 this rover cannot turn at all (measured
-           0.011 rad/s - the motors never break the wheels loose). At 0.65 it
-           spins at 0.66 rad/s, and it still holds any slope the drivetrain is
-           strong enough to climb, because the torque limit (19 deg) binds long
-           before the friction limit (33 deg). -->
+           mowers slide. It was tuned against measurements, not picked. Scrub
+           torque scales directly with mu, and at the old 0.56 m track this was
+           a knife-edge: mu 0.80 stopped the rover turning altogether (measured
+           0.011 rad/s - the motors never broke the wheels loose). The 0.80 m
+           track removed that constraint, and mu 0.80 now turns fine (0.516
+           rad/s), so this value is a free choice again rather than a hostage.
+           0.65 is kept because it is honest for pasture AND it preserves the
+           turn rate: every point of mu costs yaw. If you want more grip, 0.80
+           works and costs ~10% of the turn.
+           Either way the torque limit (16 deg) binds long before the friction
+           limit (33 deg), so mu does not set what this rover can climb. -->
       <geom type="cylinder" material="tyre" friction="0.65 0.005 0.0001"
             condim="3" priority="1" contype="1" conaffinity="1" group="0"/>
       <!-- armature 0.01 >> wheel inertia (~0.0045) because a high-reduction
@@ -265,6 +325,21 @@
       <geom class="visual" name="handle_r" type="capsule"
             fromto="-0.302 -0.14 0.035 -0.275 -0.14 0.045" size="0.012" material="body_dark"/>
 
+      <!-- ---- STUB AXLES ----
+           The 0.80 m track puts the wheels 140 mm outboard of a 0.46 m body, so
+           without these the wheels float unattached and the hero shot reads as a
+           splayed insect. Four tubes carry the wheels out from under the deck.
+           Visual only - the wheel hinges are still parented straight to the
+           chassis, so these add no bodies, no mass and no dynamics. -->
+      <geom class="visual" name="axle_fl" type="capsule"
+            fromto="0.11 0.18 -0.085 0.11 0.37 -0.085" size="0.018" material="body_dark"/>
+      <geom class="visual" name="axle_fr" type="capsule"
+            fromto="0.11 -0.18 -0.085 0.11 -0.37 -0.085" size="0.018" material="body_dark"/>
+      <geom class="visual" name="axle_rl" type="capsule"
+            fromto="-0.11 0.18 -0.085 -0.11 0.37 -0.085" size="0.018" material="body_dark"/>
+      <geom class="visual" name="axle_rr" type="capsule"
+            fromto="-0.11 -0.18 -0.085 -0.11 -0.37 -0.085" size="0.018" material="body_dark"/>
+
       <!-- ---- PV MODULE, fixed flat on the deck, 35 mm standoff for airflow ---- -->
       <geom class="visual" name="post_fl" type="cylinder" fromto="0.22 0.18 0.058 0.22 0.18 0.096" size="0.013" material="body_dark"/>
       <geom class="visual" name="post_fr" type="cylinder" fromto="0.22 -0.18 0.058 0.22 -0.18 0.096" size="0.013" material="body_dark"/>
@@ -310,9 +385,12 @@
 
       <!-- ====================  WHEELS  ====================
            axle z_local = 0.090 - 0.175 = -0.085
-           x = +/-0.110 (0.22 m wheelbase), y = +/-0.280 (0.56 m track).
-           Wheel half-width 0.030 puts the inner face at 0.250, clearing the
-           0.230 shell half-width by 20 mm of mud gap.
+           x = +/-0.110 (0.22 m wheelbase), y = +/-0.400 (0.80 m track).
+           Wheel half-width 0.030 puts the inner face at 0.370 and the outermost
+           painted detail at 0.446, which is 49 mm inside the 0.495 glass edge
+           and 59 mm inside the 0.505 frame edge: NOTHING pokes out past the
+           panel silhouette in plan view. The 140 mm of daylight between body and
+           wheel is bridged by the stub axles above.
            Each wheel gets a pale hub and an orange spoke bar on its outboard
            face: at 30 rpm you need something asymmetric to read as rotation in
            video, and a plain black cylinder reads as a stationary black disc.
@@ -325,21 +403,21 @@
         <geom class="visual" name="spoke_fl" type="box" size="0.070 0.005 0.013" pos="0 0.041 0" material="body"/>
       </body>
 
-      <body name="wheel_fr_body" pos="0.11 -0.28 -0.085">
+      <body name="wheel_fr_body" pos="0.11 -0.40 -0.085">
         <joint class="wheel" name="wheel_fr"/>
         <geom class="wheel" name="tyre_fr" fromto="0 -0.03 0 0 0.03 0" size="0.09" mass="1.1"/>
         <geom class="visual" name="hub_fr" type="cylinder" fromto="0 -0.030 0 0 -0.040 0" size="0.050" material="hub"/>
         <geom class="visual" name="spoke_fr" type="box" size="0.070 0.005 0.013" pos="0 -0.041 0" material="body"/>
       </body>
 
-      <body name="wheel_rl_body" pos="-0.11 0.28 -0.085">
+      <body name="wheel_rl_body" pos="-0.11 0.40 -0.085">
         <joint class="wheel" name="wheel_rl"/>
         <geom class="wheel" name="tyre_rl" fromto="0 -0.03 0 0 0.03 0" size="0.09" mass="1.1"/>
         <geom class="visual" name="hub_rl" type="cylinder" fromto="0 0.030 0 0 0.040 0" size="0.050" material="hub"/>
         <geom class="visual" name="spoke_rl" type="box" size="0.070 0.005 0.013" pos="0 0.041 0" material="body"/>
       </body>
 
-      <body name="wheel_rr_body" pos="-0.11 -0.28 -0.085">
+      <body name="wheel_rr_body" pos="-0.11 -0.40 -0.085">
         <joint class="wheel" name="wheel_rr"/>
         <geom class="wheel" name="tyre_rr" fromto="0 -0.03 0 0 0.03 0" size="0.09" mass="1.1"/>
         <geom class="visual" name="hub_rr" type="cylinder" fromto="0 -0.030 0 0 -0.040 0" size="0.050" material="hub"/>
@@ -382,27 +460,37 @@
 
        The other two config speeds:
          harvest 0.12 m/s -> 0.12 / 0.090 = 1.333 rad/s   (measured 0.117 m/s)
-         spin-in-place at 0.6 rad/s: measured 0.664 rad/s at FULL differential
-         ctrl. That is the headline constraint of the slow design and the
-         behaviour layer must understand it:
+         spin-in-place: measured 0.571 rad/s at FULL differential ctrl, against a
+         0.6 rad/s target. That 5% shortfall is the headline constraint of the
+         slow, wide design and the behaviour layer must understand it:
 
-         *** TURNING IS NOW THE BINDING CONSTRAINT, NOT SPEED ***
-         For a skid-steer machine,  yaw_max ~= v_max / (k * track/2), where k is
-         the scrub overspeed factor (~2.2 measured here). Wheel radius and motor
-         rpm CANCEL OUT - only top speed and track matter. Cutting top speed from
-         0.45 to 0.28 m/s therefore cut the achievable yaw by the same 38%, and
-         at the original 0.40 m wheelbase / 0.52 m track this rover measured
-         0.011 rad/s: the motors could not break the wheels loose at all. The fix
-         was geometric, not electrical - wheelbase 0.40 -> 0.22 m and track 0.52
-         -> 0.56 m, which cuts the scrub moment and raises the yaw moment arm.
-         0.6 rad/s now costs the WHOLE ctrl range, so there is no headroom for a
+         *** TURNING IS THE BINDING CONSTRAINT, NOT SPEED ***
+         For a skid-steer machine the top yaw rate is
+             yaw_max ~= v_max / [ (T/2) + (L/2)^2/(T/2) ]
+         Wheel radius and motor rpm CANCEL OUT - only top speed, track T and
+         wheelbase L appear. Two consequences, both measured, both counter to
+         intuition:
+           - Cutting top speed 0.45 -> 0.28 m/s cut achievable yaw by the same
+             38%. Speed and turn rate are the same budget.
+           - WIDENING the track makes the top yaw rate WORSE, not better
+             (0.56 m -> 0.650 rad/s, 0.80 m -> 0.571 rad/s), because each wheel
+             must cover more ground per degree turned. The wider track was still
+             the right call - it bought robustness and a lower torque ceiling -
+             but it spent turn rate to do it. See TRACK WIDTH in the header.
+         The wheelbase is the one lever that helps yaw for free, which is why it
+         is 0.22 m: at the original 0.40 m wheelbase the slow rover measured
+         0.011 rad/s and could not turn at all.
+         0.571 rad/s costs the WHOLE ctrl range, so there is no headroom for a
          full-speed arc: the behaviour stack must turn in place or slow into
          corners. Deliberate, and true of the real machine.
          Because a skid-steer cannot turn while its wheels roll cleanly (at the
          kinematic speed all slip is lateral, so friction points sideways and
          nothing is left to push the machine round), the wheels must OVERSPEED.
          Use the measured relation, and close the loop on the gyro:
-             wheel_cmd [rad/s] ~= 5.2 * desired_yaw [rad/s]   (+/-, differential)
+             wheel_cmd [rad/s] ~= 5.5 * desired_yaw [rad/s]   (+/-, differential)
+         If the demo genuinely needs a true 0.6 rad/s, the cheapest fix is track:
+         0.70 m measured 0.610 rad/s and still gives a 62 deg roll-tip. Say the
+         word and it is a two-number change.
 
        kv = 18 Nm per rad/s of error: a soft, slow, torquey servo rather than a
        snappy one, consistent with a cheap high-reduction gearmotor. It hits the
@@ -434,10 +522,10 @@
        grass (mu 0.7) and with a 5 kg harvest payload aboard. 2.7 Nm is the
        smallest ceiling that still turns with margin in all three cases. -->
   <actuator>
-    <velocity name="mot_fl" joint="wheel_fl" kv="18" ctrlrange="-3.1416 3.1416" forcerange="-2.7 2.7"/>
-    <velocity name="mot_fr" joint="wheel_fr" kv="18" ctrlrange="-3.1416 3.1416" forcerange="-2.7 2.7"/>
-    <velocity name="mot_rl" joint="wheel_rl" kv="18" ctrlrange="-3.1416 3.1416" forcerange="-2.7 2.7"/>
-    <velocity name="mot_rr" joint="wheel_rr" kv="18" ctrlrange="-3.1416 3.1416" forcerange="-2.7 2.7"/>
+    <velocity name="mot_fl" joint="wheel_fl" kv="18" ctrlrange="-3.1416 3.1416" forcerange="-2.4 2.4"/>
+    <velocity name="mot_fr" joint="wheel_fr" kv="18" ctrlrange="-3.1416 3.1416" forcerange="-2.4 2.4"/>
+    <velocity name="mot_rl" joint="wheel_rl" kv="18" ctrlrange="-3.1416 3.1416" forcerange="-2.4 2.4"/>
+    <velocity name="mot_rr" joint="wheel_rr" kv="18" ctrlrange="-3.1416 3.1416" forcerange="-2.4 2.4"/>
   </actuator>
 
   <!-- Readouts the energy model will want: panel aim (world unit vector), panel
