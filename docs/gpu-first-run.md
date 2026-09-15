@@ -20,7 +20,8 @@ Sibling workbench (already cloned, `npa` on PATH): `../nebius-physical-ai`.
 | `npa workbench health preflight --checks nebius` | **VERIFIED** | `PASS` — “Default Nebius CLI profile is authenticated.” |
 | `npa configure --show` project stanza | **VERIFIED** | alias `eu-north1`, same project id as START-HERE, region **`eu-north1`**, S3 unset |
 | START-HERE GPU listing | **VERIFIED** 15 Sep on **us-central1** / Dimitris tenant | Listing ≠ this npa stanza. **HITL before any cluster.** |
-| Token Factory key in `npa` | **PRESENT** (not live-verified this session) | `npa configure --show` reports the key set; run `npa workbench token-factory verify` next |
+| Default health preflight | **VERIFIED** 15 Sep 20:37 GMT+1 | `ok: true`. PASS: HF, Token Factory (23 models). WARN: NGC unset, S3 unset |
+| Token Factory `verify` | **VERIFIED** | `authenticated: true`, 23 models. Includes `nvidia/Nemotron-3_5-Lightning` (default text) |
 | Isaac Sim / cluster | **NOT STARTED** | Do not provision until C confirms tenant/region **and** spend |
 
 This Mac is Darwin arm64. Isaac Sim Docker is native-Linux x86_64. The box is a Nebius Linux GPU node; this laptop only runs `npa` / `nebius` over the API.
@@ -112,11 +113,18 @@ npa workbench token-factory verify
 
 ### 5 — GPU cluster (second yes — not this session)
 
-Only after HITL on tenant/region:
+Only after HITL on tenant/region. `npa` looks for Terraform at `./deploy/cluster` **relative to the current working directory**. This repo does not ship that tree — it lives in the sibling workbench. Running the short form from `solar-sheep-copy` fails with `Cannot find deploy/cluster`.
 
 ```bash
-npa cluster up --gpu-workload-profile rtx-rendering
+export PATH="$HOME/.nebius/bin:$PATH"
+unset NEBIUS_IAM_TOKEN NPA_NEBIUS_IAM_TOKEN
+npa cluster up \
+  --project eu-north1 \
+  --gpu-workload-profile rtx-rendering \
+  --terraform-dir ../nebius-physical-ai/deploy/cluster
 ```
+
+Equivalent: `cd ../nebius-physical-ai` then the short form. `npa configure --show` currently has **S3 unset**; Terraform remote state needs a bucket, so the next failure after a missing `deploy/cluster` is often storage. Fix with `npa configure` (or `npa storage`) before a long apply.
 
 That profile selects `gpu-rtx6000` and defaults to `1gpu-24vcpu-218gb`. Preemptible is the cheap quota tier; confirm before `--preemptible` because the node can vanish mid-demo.
 
