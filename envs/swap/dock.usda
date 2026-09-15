@@ -1,0 +1,132 @@
+#usda 1.0
+(
+    defaultPrim = "Dock"
+    upAxis = "Z"
+    metersPerUnit = 1
+    doc = "Drive-over underbody battery-swap dock. Author at origin; C places in world.usd. Owner: B."
+)
+
+def Xform "Dock" (
+    kind = "assembly"
+)
+{
+    custom string user:role = "battery_swap_dock"
+    custom string user:contract = "swap_battery"
+
+    def Xform "frames"
+    {
+        def Xform "approach"
+        {
+            double3 xformOp:translate = (0, -1.5, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+            custom string user:frame = "approach"
+        }
+
+        def Xform "berth"
+        {
+            double3 xformOp:translate = (0, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+            custom string user:frame = "berth"
+        }
+
+        def Xform "pack_attach"
+        {
+            # Tracks carriage top; script may re-parent or drive this with the lift.
+            double3 xformOp:translate = (0, 0, 0.16)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+            custom string user:frame = "pack_attach"
+        }
+
+        def Xform "empty_ready"
+        {
+            double3 xformOp:translate = (0.45, 0, 0.05)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+            custom string user:frame = "empty_ready"
+        }
+
+        def Xform "full_stow"
+        {
+            double3 xformOp:translate = (-0.45, 0, 0.05)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+            custom string user:frame = "full_stow"
+        }
+    }
+
+    def Cube "pad" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        double size = 1
+        float3 xformOp:scale = (0.90, 0.70, 0.04)
+        double3 xformOp:translate = (0, 0, 0.02)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        color3f[] primvars:displayColor = [(0.35, 0.35, 0.38)]
+    }
+
+    def Xform "base" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+    )
+    {
+        bool physics:rigidBodyEnabled = 0
+        custom string user:role = "dock_base_static"
+
+        def Cube "housing"
+        {
+            double size = 1
+            float3 xformOp:scale = (0.40, 0.35, 0.08)
+            double3 xformOp:translate = (0, 0, 0.06)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.55, 0.45, 0.20)]
+        }
+    }
+
+    def Xform "lift"
+    {
+        def Xform "carriage" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsCollisionAPI", "PhysicsMassAPI"]
+        )
+        {
+            float physics:mass = 2.0
+            double3 xformOp:translate = (0, 0, 0.04)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+
+            def Cube "plate"
+            {
+                double size = 1
+                float3 xformOp:scale = (0.28, 0.18, 0.03)
+                double3 xformOp:translate = (0, 0, 0.015)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                color3f[] primvars:displayColor = [(0.80, 0.65, 0.15)]
+            }
+        }
+
+        def PhysicsPrismaticJoint "lift_joint"
+        {
+            rel physics:body0 = </Dock/base>
+            rel physics:body1 = </Dock/lift/carriage>
+            uniform token physics:axis = "Z"
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0.12
+            float physics:jointFriction = 0
+        }
+    }
+
+    # Visual placeholders for rack poses (real packs are referenced/instanced at runtime).
+    def Cube "empty_rack_marker"
+    {
+        double size = 1
+        float3 xformOp:scale = (0.08, 0.08, 0.02)
+        double3 xformOp:translate = (0.45, 0, 0.05)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        color3f[] primvars:displayColor = [(0.2, 0.7, 0.9)]
+    }
+
+    def Cube "full_stow_marker"
+    {
+        double size = 1
+        float3 xformOp:scale = (0.08, 0.08, 0.02)
+        double3 xformOp:translate = (-0.45, 0, 0.05)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        color3f[] primvars:displayColor = [(0.9, 0.4, 0.2)]
+    }
+}

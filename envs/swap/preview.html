@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Solar Sheep — swap dock preview (B)</title>
+<style>
+  :root {
+    --bg: #1a1f18;
+    --panel: #242b22;
+    --ink: #e8efe4;
+    --muted: #9aab94;
+    --accent: #c4a035;
+    --full: #2f9e6b;
+    --empty: #3a9cc7;
+    --fail: #c45a3a;
+    --ok: #6bcf7a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 14px/1.4 "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    background: radial-gradient(1200px 600px at 20% 0%, #2a3326, var(--bg));
+    color: var(--ink);
+    min-height: 100vh;
+  }
+  header {
+    padding: 1rem 1.5rem 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.5rem;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  h1 { font-size: 1.15rem; font-weight: 600; margin: 0; letter-spacing: 0.02em; }
+  h1 span { color: var(--accent); font-weight: 500; }
+  .meta { color: var(--muted); font-size: 0.85rem; }
+  main {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 1rem;
+    padding: 0.5rem 1.5rem 1.5rem;
+    max-width: 1100px;
+  }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+  canvas {
+    width: 100%;
+    height: auto;
+    background: #121610;
+    border: 1px solid #333d30;
+    border-radius: 4px;
+    display: block;
+  }
+  aside {
+    background: var(--panel);
+    border: 1px solid #333d30;
+    border-radius: 4px;
+    padding: 1rem;
+  }
+  .status {
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    margin: 0 0 0.25rem;
+  }
+  .status.RUNNING { color: var(--accent); }
+  .status.SUCCESS { color: var(--ok); }
+  .status.FAILURE { color: var(--fail); }
+  .phase { color: var(--muted); margin-bottom: 1rem; }
+  ol.phases {
+    margin: 0 0 1rem;
+    padding-left: 1.2rem;
+    color: var(--muted);
+  }
+  ol.phases li.active { color: var(--ink); font-weight: 600; }
+  ol.phases li.done { color: var(--ok); }
+  .btns { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+  button {
+    background: #3a4536;
+    color: var(--ink);
+    border: 1px solid #55604f;
+    border-radius: 3px;
+    padding: 0.4rem 0.7rem;
+    cursor: pointer;
+    font: inherit;
+  }
+  button:hover { background: #4a5644; }
+  button.primary { background: var(--accent); color: #1a1508; border-color: #a88628; font-weight: 600; }
+  .note { font-size: 0.8rem; color: var(--muted); margin-top: 1rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted); }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Battery swap dock <span>· owner B preview</span></h1>
+    <div class="meta">Laptop stand-in for Isaac — geometry from <code>envs/swap/SPEC.md</code> · not the USD renderer</div>
+  </div>
+  <div class="legend">
+    <span><i class="swatch" style="background:#2f9e6b"></i>full pack</span>
+    <span><i class="swatch" style="background:#3a9cc7"></i>empty pack</span>
+    <span><i class="swatch" style="background:#c4a035"></i>lift</span>
+  </div>
+</header>
+<main>
+  <div>
+    <canvas id="c" width="800" height="480"></canvas>
+  </div>
+  <aside>
+    <div class="status RUNNING" id="status">RUNNING</div>
+    <div class="phase" id="phaseLabel">phase: —</div>
+    <ol class="phases" id="phaseList">
+      <li data-p="approach">approach / berth</li>
+      <li data-p="lift_full">lift full pack</li>
+      <li data-p="stow_full">stow full</li>
+      <li data-p="offer_empty">offer empty</li>
+      <li data-p="latch_empty">latch empty</li>
+      <li data-p="release">release</li>
+    </ol>
+    <div class="btns">
+      <button class="primary" id="btnHappy">Run happy path</button>
+      <button id="btnMis">Fail: misaligned</button>
+      <button id="btnEmpty">Fail: no empty</button>
+      <button id="btnPause">Pause</button>
+    </div>
+    <p class="note">Real Isaac view needs Nebius RTX PRO 6000. This preview animates the same phase machine timings (~10 s after berth).</p>
+  </aside>
+</main>
+<script>
+'use strict';
+
+const PHASES = [
+  { id: 'approach', dur: 1.2 },
+  { id: 'lift_full', dur: 2.0 },
+  { id: 'stow_full', dur: 2.0 },
+  { id: 'offer_empty', dur: 2.0 },
+  { id: 'latch_empty', dur: 2.5 },
+  { id: 'release', dur: 1.5 },
+];
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const statusEl = document.getElementById('status');
+const phaseLabel = document.getElementById('phaseLabel');
+const phaseList = document.getElementById('phaseList');
+
+let mode = 'happy'; // happy | misaligned | no_empty
+let paused = false;
+let t = 0;
+let phaseIdx = 0;
+let phaseT = 0;
+let status = 'RUNNING';
+let last = performance.now();
+
+function reset(m) {
+  mode = m;
+  t = 0;
+  phaseIdx = 0;
+  phaseT = 0;
+  status = 'RUNNING';
+  paused = false;
+  document.getElementById('btnPause').textContent = 'Pause';
+  if (mode === 'misaligned') {
+    status = 'FAILURE';
+    phaseIdx = 0;
+  }
+}
+
+function setHud() {
+  statusEl.textContent = status;
+  statusEl.className = 'status ' + status;
+  const pid = PHASES[Math.min(phaseIdx, PHASES.length - 1)].id;
+  phaseLabel.textContent = status === 'SUCCESS' ? 'phase: done'
+    : status === 'FAILURE' ? 'phase: failed (' + (mode === 'misaligned' ? 'misaligned' : mode === 'no_empty' ? 'no_empty_pack' : '—') + ')'
+    : 'phase: ' + pid + '  ·  t=' + t.toFixed(1) + 's';
+  [...phaseList.querySelectorAll('li')].forEach((li, i) => {
+    li.className = '';
+    if (status === 'SUCCESS' || i < phaseIdx) li.className = 'done';
+    else if (i === phaseIdx && status === 'RUNNING') li.className = 'active';
+  });
+}
+
+function liftHeight() {
+  const id = PHASES[phaseIdx].id;
+  const u = Math.min(1, phaseT / PHASES[phaseIdx].dur);
+  if (id === 'lift_full' || id === 'latch_empty') return 0.04 + 0.12 * u;
+  if (id === 'stow_full' || id === 'release') return 0.16 - 0.12 * u;
+  if (id === 'offer_empty') return 0.04;
+  return 0.04;
+}
+
+function packState() {
+  // full on rover → on carriage → stow left; empty on rack → carriage → rover
+  const id = PHASES[phaseIdx].id;
+  const u = Math.min(1, phaseT / PHASES[phaseIdx].dur);
+  let full = { x: 0, z: 0.16, on: 'rover' };
+  let empty = { x: 0.45, z: 0.05, on: 'rack' };
+  let hasEmpty = mode !== 'no_empty';
+
+  if (id === 'approach') {
+    full = { x: 0, z: 0.16, on: 'rover' };
+  } else if (id === 'lift_full') {
+    full = { x: 0, z: 0.16, on: 'carriage' };
+  } else if (id === 'stow_full') {
+    full = { x: -0.45 * u, z: 0.05 + 0.11 * (1 - u), on: 'moving' };
+  } else if (phaseIdx > 2 || status === 'SUCCESS') {
+    full = { x: -0.45, z: 0.05, on: 'stow' };
+  }
+
+  if (!hasEmpty) {
+    empty = null;
+  } else if (id === 'offer_empty') {
+    empty = { x: 0.45 * (1 - u), z: 0.05, on: 'moving' };
+  } else if (id === 'latch_empty') {
+    empty = { x: 0, z: 0.04 + 0.12 * u, on: 'carriage' };
+  } else if (id === 'release' || status === 'SUCCESS') {
+    empty = { x: 0, z: 0.16, on: 'rover' };
+  } else if (phaseIdx < 3) {
+    empty = { x: 0.45, z: 0.05, on: 'rack' };
+  }
+  return { full, empty, liftZ: liftHeight() };
+}
+
+function worldToSide(x, z) {
+  // side view: X horizontal, Z up — metres → px
+  const ox = 400, oy = 340, s = 220;
+  return { x: ox + x * s, y: oy - z * s };
+}
+
+function worldToTop(x, y) {
+  const ox = 400, oy = 110, s = 90;
+  return { x: ox + x * s, y: oy - y * s };
+}
+
+function drawRectSide(x, z, w, h, color) {
+  const p = worldToSide(x - w / 2, z);
+  ctx.fillStyle = color;
+  ctx.fillRect(p.x, p.y - h * 220, w * 220, h * 220);
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // labels
+  ctx.fillStyle = '#6a7a62';
+  ctx.font = '12px IBM Plex Sans, sans-serif';
+  ctx.fillText('TOP (XY)', 24, 28);
+  ctx.fillText('SIDE (XZ) — drive-over lift', 24, 210);
+
+  // ground line side
+  ctx.strokeStyle = '#2e382c';
+  ctx.beginPath();
+  const g0 = worldToSide(-1.2, 0), g1 = worldToSide(1.2, 0);
+  ctx.moveTo(g0.x, g0.y); ctx.lineTo(g1.x, g1.y); ctx.stroke();
+
+  const st = packState();
+
+  // TOP view pad
+  const pad = worldToTop(0, 0);
+  ctx.fillStyle = '#3a4038';
+  ctx.fillRect(pad.x - 0.45 * 90, pad.y - 0.35 * 90, 0.9 * 90, 0.7 * 90);
+  ctx.strokeStyle = '#c4a035';
+  ctx.strokeRect(pad.x - 0.45 * 90, pad.y - 0.35 * 90, 0.9 * 90, 0.7 * 90);
+
+  // frames markers top
+  [['approach', 0, -1.5], ['berth', 0, 0], ['empty', 0.45, 0], ['stow', -0.45, 0]].forEach(([n, x, y]) => {
+    const p = worldToTop(x, y);
+    ctx.fillStyle = '#8a9a82';
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillText(n, p.x + 6, p.y + 3);
+  });
+
+  // rover top
+  const roverMis = mode === 'misaligned' ? 0.55 : 0;
+  const rt = worldToTop(roverMis, 0);
+  ctx.fillStyle = '#5a5348';
+  roundRect(rt.x - 28, rt.y - 40, 56, 80, 6);
+  ctx.fill();
+  ctx.fillStyle = '#2a6a9a';
+  ctx.fillRect(rt.x - 22, rt.y - 28, 44, 30); // panel
+
+  // SIDE pad
+  drawRectSide(0, 0, 0.9, 0.04, '#3a4038');
+
+  // lift housing + carriage
+  drawRectSide(0, 0.02, 0.4, 0.06, '#6a5a30');
+  const lz = st.liftZ;
+  drawRectSide(0, lz, 0.28, 0.03, '#c4a035');
+
+  // rover body side
+  const rx = roverMis;
+  drawRectSide(rx, 0.12, 0.55, 0.18, '#5a5348');
+  drawRectSide(rx, 0.30, 0.50, 0.04, '#2a6a9a');
+  // wheels
+  ctx.fillStyle = '#222';
+  [-0.18, 0.18].forEach(ox => {
+    const p = worldToSide(rx + ox, 0.06);
+    ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2); ctx.fill();
+  });
+
+  function drawPack(p, color) {
+    if (!p) return;
+    drawRectSide(p.x + rx * (p.on === 'rover' ? 1 : 0), p.z, 0.30, 0.10, color);
+  }
+  // packs: when on rover use rover x offset
+  if (st.full) {
+    const fx = st.full.on === 'rover' ? rx : st.full.x;
+    drawRectSide(fx, st.full.z, 0.30, 0.10, '#2f9e6b');
+  }
+  if (st.empty) {
+    const ex = st.empty.on === 'rover' ? rx : st.empty.x;
+    drawRectSide(ex, st.empty.z, 0.30, 0.10, '#3a9cc7');
+  }
+
+  // misaligned banner
+  if (mode === 'misaligned') {
+    ctx.fillStyle = 'rgba(196,90,58,0.85)';
+    ctx.fillRect(200, 400, 400, 36);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px IBM Plex Sans, sans-serif';
+    ctx.fillText('FAILURE · misaligned (XY > 0.08 m)', 230, 424);
+  }
+  if (status === 'FAILURE' && mode === 'no_empty') {
+    ctx.fillStyle = 'rgba(196,90,58,0.85)';
+    ctx.fillRect(200, 400, 400, 36);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px IBM Plex Sans, sans-serif';
+    ctx.fillText('FAILURE · no_empty_pack', 270, 424);
+  }
+  if (status === 'SUCCESS') {
+    ctx.fillStyle = 'rgba(107,207,122,0.2)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#6bcf7a';
+    ctx.font = 'bold 20px IBM Plex Sans, sans-serif';
+    ctx.fillText('SUCCESS', 350, 250);
+  }
+
+  setHud();
+}
+
+function advance(dt) {
+  if (paused || status !== 'RUNNING') return;
+  if (mode === 'misaligned') return;
+
+  t += dt;
+  phaseT += dt;
+  const cur = PHASES[phaseIdx];
+
+  if (mode === 'no_empty' && cur.id === 'offer_empty') {
+    status = 'FAILURE';
+    return;
+  }
+
+  if (phaseT >= cur.dur) {
+    phaseT = 0;
+    phaseIdx += 1;
+    if (phaseIdx >= PHASES.length) {
+      phaseIdx = PHASES.length - 1;
+      status = 'SUCCESS';
+    }
+  }
+}
+
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  advance(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+document.getElementById('btnHappy').onclick = () => reset('happy');
+document.getElementById('btnMis').onclick = () => reset('misaligned');
+document.getElementById('btnEmpty').onclick = () => reset('no_empty');
+document.getElementById('btnPause').onclick = () => {
+  paused = !paused;
+  document.getElementById('btnPause').textContent = paused ? 'Resume' : 'Pause';
+};
+
+reset('happy');
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
