@@ -13,6 +13,36 @@ roof PV array feeds the grid directly and is metered separately.
 Everything runs client-side in vanilla JavaScript + Canvas 2D. No build step,
 no dependencies.
 
+## Why
+
+The panel stopped being the expensive part. Everything wrapped around it —
+racking, groundworks, trenching, labour, the grid connection, the consent to do
+any of it — is now what a solar farm actually costs. This project deletes the
+wrapping rather than the panel.
+
+- **No installation.** The module arrives already mounted on the thing that
+  carries it. You unload it and it works. The single largest line item in a
+  ground-mount build, and the one that has not been getting cheaper, simply
+  isn't there.
+- **Barely a permitting question, and no land written off.** Nothing is fixed
+  to the ground, nothing is dug, and the field stays a field — the herd grazes
+  it rather than covering it. Because the whole thing drives away again, the
+  decision to host it is reversible, and a reversible decision is a much
+  smaller one to ask for.
+- **You are going to buy the batteries anyway.** In more and more markets
+  midday solar already exceeds midday demand, and daytime capture prices are
+  heading to zero. Any new solar built from here needs storage to be worth
+  anything. So the packs aren't an extra cost of this design — they're the cost
+  everybody is about to pay regardless.
+- **Then why keep the installation?** Once storage is mandatory, the panel no
+  longer has to be wired to anything. Each sheep fills a pack, drives to the
+  dock, swaps it for an empty one and goes back out; the energy leaves the field
+  in a box instead of a trench. The only fixed infrastructure left is one dock
+  and one shed. Everything else is a fleet — movable, expandable, removable.
+
+And because it already has wheels, tracking the sun costs nothing extra: the
+sheep turns its whole body toward the sun instead of carrying a tracker.
+
 ## Run it
 
 There is nothing to install. Serve the folder with any static file server and
