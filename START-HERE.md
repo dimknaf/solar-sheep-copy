@@ -52,6 +52,29 @@ Good news, also verbatim — **simulation counts, no hardware needed**:
 Full rubric and submission checklist: **[`docs/rules.md`](docs/rules.md)**. Argue from that file,
 never from memory.
 
+## How we are scored — and what that means for the video
+
+Four criteria, **scored 1–5, equally weighted** (25% each, max 20). But **ties break on
+Technological Implementation first**, then Design, then Impact, then Idea — and with thousands of
+entrants scored 1–5 there *will* be ties at the top. **Tech Implementation is worth more than 25%
+in practice.**
+
+> "Judges are not required to watch beyond three minutes."
+> "Judges are not required to test the Project and may choose to judge based solely on the text
+> description, images, and video."
+
+**The video is the deliverable.** Put the Nebius/NVIDIA depth in the **first 30 seconds**.
+
+**Prize strategy:** the rules allow *one Overall Award* **OR** *one Track Award + one Bonus*. We
+target **Physical AI Track (Jetson) + Best Use of Tavily ($3,000)** — better odds than chasing the
+$20k, and the Physical AI field is small (comparable NVIDIA events drew 21–24 submissions).
+
+**Sim-only wins** — in NVIDIA's own Cosmos Cookoff, 1st *and* 2nd place were both Isaac Sim, and 2nd
+place was a 100% simulated drone with no hardware. But the organisers here said *"a scripted demo is
+table stakes; hardware reacting live to real-world input is where this track can really shine."*
+**Cheap hedge:** 60 s of any real device reacting live — a webcam + ESP32 satisfies "IoT /
+on-device intelligence", and an ESP32-based project won Grand Prize at a comparable event.
+
 ---
 
 ## 🎯 START FROM NEBIUS'S OWN REPO — do not build this from scratch
@@ -96,16 +119,15 @@ So provision **`gpu-l40s-d`** (~$0.74/hr preemptible, $1.55 on-demand, `eu-north
 **`gpu-rtx6000`** (~$0.95 preemptible, $1.80 on-demand). **Never H100/H200/B200/B300** — only
 state-based headless training can route there.
 
-### 💸 The cost reality — this is the real blocker now
+### 💸 GPU money — claim the event credits
 
-**Our credits do not pay for GPU.** The `NEBIUS-DEVPOST-GLOBAL26` code is
-`utm_promo_code_type=Token_Factory` — inference only. And:
+**Builders & Brews attendees get $100 Token Factory + $100 Nebius AI Cloud** (plus Tavily and
+Zapier). ⭐ **The $100 AI Cloud is the GPU budget** — about 130 hours of L40S preemptible, which
+covers the whole project. **Claim it at the event; don't leave without it.**
 
-> "The free trial program in Nebius AI Cloud has been suspended as of July 13, 2026."
-
-Budget real money: **40 GPU-hours ≈ $30 on L40S preemptible, ≈ $72 on RTX PRO 6000 on-demand.**
-Manageable, but someone has to put a card on the account. C: ask the booth whether any AI Cloud
-credits exist for this event — none are documented publicly.
+Without it we pay out of pocket: the two promo codes are `utm_promo_code_type=Token_Factory`
+(inference only), and *"the free trial program in Nebius AI Cloud has been suspended as of July 13,
+2026."* 40 GPU-hours ≈ $30 on L40S preemptible, ≈ $72 on RTX PRO 6000 on-demand.
 
 **Fallback if that's unacceptable:** train in **MuJoCo Playground** (Go1 joystick policy in ~7 min
 on one GPU, no RT cores needed) and rent an L40S only for the final render pass. The interfaces in
