@@ -1,0 +1,5 @@
+docs/info.md
+docs/access.md
+.env
+__pycache__/
+*.pyc
