@@ -5,6 +5,8 @@
 # Shell scripts run in WSL / Linux, even from a Windows checkout
 # (CRLF broke scripts/teardown.sh with "$'\r': command not found").
 *.sh text eol=lf
+# Cloud-init is sent verbatim to the Linux VM.
+scripts/gpu/*.yaml text eol=lf
 
 # Skills are read by agents on Windows and Linux alike.
 .claude/skills/** text eol=lf
