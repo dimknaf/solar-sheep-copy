@@ -451,6 +451,16 @@ def build_model(args, video_wh=(1280, 720)):
     if m.opt.cone != mujoco.mjtCone.mjCONE_PYRAMIDAL:
         print("[model] cone elliptic -> pyramidal (MJX is markedly faster and steadier with it)")
         m.opt.cone = mujoco.mjtCone.mjCONE_PYRAMIDAL
+    # MJX refuses implicitfast the moment any fluid drag is active
+    # ("implicitfast not implemented for fluid drag"), and rover.xml authors
+    # density="1.2" (air).  At 0.279 m/s the dynamic pressure on the panel is
+    # ~0.05 Pa against a 106.7 N tractive force -- six orders of magnitude down,
+    # so dropping it costs nothing physical and keeps the fast integrator.
+    if m.opt.density != 0.0 or m.opt.viscosity != 0.0:
+        print(f"[model] fluid drag density={m.opt.density} viscosity={m.opt.viscosity} -> 0 "
+              f"(MJX cannot pair implicitfast with fluid drag; negligible at 0.28 m/s)")
+        m.opt.density = 0.0
+        m.opt.viscosity = 0.0
     m.vis.global_.offwidth = max(m.vis.global_.offwidth, video_wh[0])
     m.vis.global_.offheight = max(m.vis.global_.offheight, video_wh[1])
     m.vis.map.znear = max(m.vis.map.znear, 0.01)
@@ -934,8 +944,15 @@ def make_env(m, mi, args, use_sensor_rf):
             info = {"rng": rng, "target": target, "last_action": action, "prev_dist": prev_dist,
                     "t_total": t_total, "mocap_pos": mp, "mocap_quat": mq,
                     "obs_xy": obs_xy_next, "slope_f": slope_f, "slope_vec": slope_vec}
+            # brax's EpisodeWrapper scans step() over action_repeat, and lax.scan
+            # demands the carry pytree be identical in and out.  The wrappers add
+            # their own keys (steps, truncation, first_obs, episode_metrics, ...)
+            # and AutoResetWrapper reads them, so MERGE into what we were handed
+            # rather than replacing it -- a fresh dict drops their keys and scan
+            # dies with a carry-structure mismatch.
             return state.replace(pipeline_state=dx, obs=obs, reward=reward, done=done,
-                                 metrics=metrics, info=info)
+                                 metrics={**state.metrics, **metrics},
+                                 info={**state.info, **info})
 
     env = RoverEnv()
     env.obs_dim, env.act_dim, env.mixer = obs_dim, act_dim, A

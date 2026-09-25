@@ -1,0 +1,33 @@
+# Traverse trainer — pinned from a run that ACTUALLY PASSED, not from memory.
+# Verified 15 Sep 2026, Windows 11 / Python 3.11.5 / CPU:
+#   envs/traverse/train.py --smoke --allow-cpu --gl wgl --rough 0 --obstacles 0 --rubble 0
+#   -> SMOKE TEST PASSED, then --rollout produced a clean 1280x720 25 s mp4.
+#
+# ⚠️ jax is pinned to 0.9.x ON PURPOSE. DO NOT "upgrade" it.
+#    jax 0.10 removed jax.device_put_replicated, which brax 0.14.2 still calls
+#    (brax/training/agents/ppo/train.py:756) — the run dies at PPO start with
+#    AttributeError. 0.9.2 keeps it (deprecated but present).
+#    Note flax 0.12.8 declares jax>=0.10.0, so pip prints a dependency-conflict
+#    warning on install. It is a false alarm here — verified working.
+
+jax==0.9.2
+jaxlib==0.9.2
+brax==0.14.2
+flax==0.12.8
+optax==0.2.8
+mujoco==3.13.0
+mujoco-mjx==3.13.0
+imageio==2.37.4
+imageio-ffmpeg==0.6.0
+numpy==2.4.6
+scipy==1.17.1
+
+# ---------------------------------------------------------------------------
+# ON THE NEBIUS GPU BOX, install the CUDA build of jaxlib instead of the two
+# lines above — same version, CUDA wheel:
+#
+#   pip install -r requirements.txt
+#   pip install -U --force-reinstall "jax[cuda12]==0.9.2"
+#   python -c "import jax; print(jax.default_backend(), jax.devices())"   # must say 'gpu'
+#
+# and drop `--gl wgl` (that flag is Windows-only; the box wants the default egl).
