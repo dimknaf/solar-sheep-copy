@@ -1,6 +1,9 @@
 docs/info.md
 docs/access.md
 .env
+.venv/
+runs/
+envs/traverse/runs/
 __pycache__/
 *.pyc
 __pycache__/
