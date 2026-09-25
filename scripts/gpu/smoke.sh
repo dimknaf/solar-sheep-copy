@@ -71,10 +71,12 @@ T0=$(date +%s)
 grep -iE "physics|backend|Mean reward|mean_reward|Learning iteration $((ITER - 1))" /data/runs/smoke_train.log | tail -5
 
 echo "=== 4. play the checkpoint and record a video ==="
+# No --viz none here: the video recorder captures from the headless Kit visualizer, and
+# --viz none removes it ("Frame capture failed ... no 'kit' visualizer", 25 Sep).
 "${RUN[@]}" -lc "
   $ISAAC_ENV
   timeout 1800 isaaclab play --rl_library rsl_rl --task Isaac-Cartpole --num_envs 16 \
-    --checkpoint latest --video --video_length 300 --viz none
+    --checkpoint latest --video --video_length 300
 " > /data/runs/smoke_play.log 2>&1 && pass "played the checkpoint" \
   || fail "play/video (see /data/runs/smoke_play.log)"
 VIDEOS=$(find /data/runs -name '*.mp4' -newermt "@$T0" 2>/dev/null)
