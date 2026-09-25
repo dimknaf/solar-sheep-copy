@@ -195,6 +195,10 @@ is precisely what a Technological Implementation judge probes. The training mode
 
 ## 6 · Format / engine decision
 
+> **SUPERSEDED 24–25 Sep 2026** — the project moved to Omniverse (Isaac Lab on PhysX, checked on
+> Newton MuJoCo-Warp). See [decisions.md](decisions.md) D1, D4–D6. Kept below as the historical
+> record; the geometry sections above still hold.
+
 > ### DECISION: **one simulator — MuJoCo. Hand-transcribe `dock.usda` to a ~40-line `dock.xml`.**
 > Keep USD as a *render-only* option behind a pose-stream boundary, to be dropped the moment it
 > costs a day.
