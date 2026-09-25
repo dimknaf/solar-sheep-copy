@@ -1,23 +1,295 @@
 {
-  "version": 1,
+  "version": 2,
   "skills": {
-    "omniverse-cad-to-simready": {
-      "source": "nvidia/skills",
+    "gpu-selection": {
+      "source": "nebius/nebius-physical-ai",
       "sourceType": "github",
-      "skillPath": "skills/omniverse-cad-to-simready/SKILL.md",
-      "computedHash": "7f84ac0da5e435c5560e96f49a2186278da3f5bbafd61ee4e6e46ae71bdc4730"
+      "ref": "main",
+      "commit": "bf4788a0a94ce2c2e842f54c5dc39932795d6cc5",
+      "skillPath": "skills/atomic/gpu-selection/SKILL.md",
+      "installedAs": ".claude/skills/gpu-selection/",
+      "license": "Apache-2.0",
+      "computedHash": "3e3415c251526d4dad80687bb209e3adcba1b88bfe49ece87b0d75c132aa1002"
     },
-    "omniverse-realtime-viewer": {
-      "source": "nvidia/skills",
+    "health-preflight": {
+      "source": "nebius/nebius-physical-ai",
       "sourceType": "github",
-      "skillPath": "skills/omniverse-realtime-viewer/SKILL.md",
-      "computedHash": "5864bb721d7f91a2e4ae6e64396ea7c04cd5ebf63d9ef4caf71efe2efb28ce2c"
+      "ref": "main",
+      "commit": "bf4788a0a94ce2c2e842f54c5dc39932795d6cc5",
+      "skillPath": "skills/atomic/health-preflight/SKILL.md",
+      "installedAs": ".claude/skills/health-preflight/",
+      "license": "Apache-2.0",
+      "computedHash": "fbc7b22252f37aacb9427bab7da14c2125f050a93882eb4548341c39e437087d"
     },
-    "omniverse-usd-performance-tuning": {
-      "source": "nvidia/skills",
+    "isaac-camera": {
+      "source": "isaac-sim/IsaacSim",
       "sourceType": "github",
-      "skillPath": "skills/omniverse-usd-performance-tuning/SKILL.md",
-      "computedHash": "dee225dcfc6b5c326f8e6db525e4606bf93abf87dc210674047edae6073c8382"
+      "ref": "v6.1.0",
+      "commit": "7c206f75bdadd9e05fc457f19863ca4c3f0cb693",
+      "skillPath": ".claude/skills/isaac-camera/SKILL.md",
+      "installedAs": ".claude/skills/isaac-camera/",
+      "license": "Apache-2.0",
+      "computedHash": "cf60aaf7dbccf0ecef6ef0d520121e704103185ebb8add3cfb9ce89c50a6a9cb"
+    },
+    "isaac-sim-headless-deployment": {
+      "source": "isaac-sim/IsaacSim",
+      "sourceType": "github",
+      "ref": "v6.1.0",
+      "commit": "7c206f75bdadd9e05fc457f19863ca4c3f0cb693",
+      "skillPath": ".claude/skills/isaac-sim-headless-deployment/SKILL.md",
+      "installedAs": ".claude/skills/isaac-sim-headless-deployment/",
+      "license": "Apache-2.0",
+      "computedHash": "0b09d005f49dcb6af2fd62480cd0c045ddf5d2a48e83f7514c835c2bf99ff27f"
+    },
+    "isaac-sim-rendering": {
+      "source": "isaac-sim/IsaacSim",
+      "sourceType": "github",
+      "ref": "v6.1.0",
+      "commit": "7c206f75bdadd9e05fc457f19863ca4c3f0cb693",
+      "skillPath": ".claude/skills/isaac-sim-rendering/SKILL.md",
+      "installedAs": ".claude/skills/isaac-sim-rendering/",
+      "license": "Apache-2.0",
+      "computedHash": "96e62edb2408d92cb67e01426a74f4f41bf3aa06e2a224413674633424c1b6b3"
+    },
+    "isaac-sim-robot-navigation": {
+      "source": "isaac-sim/IsaacSim",
+      "sourceType": "github",
+      "ref": "v6.1.0",
+      "commit": "7c206f75bdadd9e05fc457f19863ca4c3f0cb693",
+      "skillPath": ".claude/skills/isaac-sim-robot-navigation/SKILL.md",
+      "installedAs": ".claude/skills/isaac-sim-robot-navigation/",
+      "license": "Apache-2.0",
+      "computedHash": "2ca861cafea36bbadb279d342cb87aaf40c1290ded6d60a02c24e7082a14718c"
+    },
+    "isaac-sim-troubleshooting": {
+      "source": "isaac-sim/IsaacSim",
+      "sourceType": "github",
+      "ref": "v6.1.0",
+      "commit": "7c206f75bdadd9e05fc457f19863ca4c3f0cb693",
+      "skillPath": ".claude/skills/isaac-sim-troubleshooting/SKILL.md",
+      "installedAs": ".claude/skills/isaac-sim-troubleshooting/",
+      "license": "Apache-2.0",
+      "computedHash": "f8777426766d16302fe018d5288a305ca8e6739bbb323a06102dfd07f4a44db3"
+    },
+    "isaac-sim-validator": {
+      "source": "isaac-sim/IsaacSim",
+      "sourceType": "github",
+      "ref": "v6.1.0",
+      "commit": "7c206f75bdadd9e05fc457f19863ca4c3f0cb693",
+      "skillPath": ".claude/skills/isaac-sim-validator/SKILL.md",
+      "installedAs": ".claude/skills/isaac-sim-validator/",
+      "license": "Apache-2.0",
+      "computedHash": "17fd7fc58340c3e20e6e97cf342087d2f3f6de0e0ecabf333cd4549be2db91b7"
+    },
+    "isaac-sim-workflow": {
+      "source": "isaac-sim/IsaacSim",
+      "sourceType": "github",
+      "ref": "v6.1.0",
+      "commit": "7c206f75bdadd9e05fc457f19863ca4c3f0cb693",
+      "skillPath": ".claude/skills/isaac-sim-workflow/SKILL.md",
+      "installedAs": ".claude/skills/isaac-sim-workflow/",
+      "license": "Apache-2.0",
+      "computedHash": "6c494c0e3c34cb785fb2e8566ddeb563500133447ddfbf28884a6060345f6ca4"
+    },
+    "isaaclab-building-environments": {
+      "source": "isaac-sim/IsaacLab",
+      "sourceType": "github",
+      "ref": "v3.0.0-EA",
+      "commit": "ae37b028ea415c91ea2bc32609efcd759ed2b974",
+      "skillPath": "skills/user/create-environments/SKILL.md",
+      "installedAs": ".claude/skills/isaaclab-building-environments/",
+      "license": "BSD-3-Clause",
+      "computedHash": "c06f30d12a15afb8a2a8157f546d5fff2ce4d8cd6aa772467bf6b8a136558538"
+    },
+    "isaaclab-debugging-rl-training": {
+      "source": "isaac-sim/IsaacLab",
+      "sourceType": "github",
+      "ref": "v3.0.0-EA",
+      "commit": "ae37b028ea415c91ea2bc32609efcd759ed2b974",
+      "skillPath": "skills/user/debug-rl-training/SKILL.md",
+      "installedAs": ".claude/skills/isaaclab-debugging-rl-training/",
+      "license": "BSD-3-Clause",
+      "computedHash": "9c6edf7d7dab455eb3d8e20fa0f101815c48e8853bb82a7ebd1beec2b4420cb0"
+    },
+    "isaaclab-installing-isaac-lab": {
+      "source": "isaac-sim/IsaacLab",
+      "sourceType": "github",
+      "ref": "v3.0.0-EA",
+      "commit": "ae37b028ea415c91ea2bc32609efcd759ed2b974",
+      "skillPath": "skills/user/install-isaac-lab/SKILL.md",
+      "installedAs": ".claude/skills/isaaclab-installing-isaac-lab/",
+      "license": "BSD-3-Clause",
+      "computedHash": "0a582d1ceac2a70590983606392d3383e0718143116380813c2b37765938f83f"
+    },
+    "isaaclab-preparing-assets-for-newton": {
+      "source": "isaac-sim/IsaacLab",
+      "sourceType": "github",
+      "ref": "v3.0.0-EA",
+      "commit": "ae37b028ea415c91ea2bc32609efcd759ed2b974",
+      "skillPath": "skills/user/prepare-assets-for-newton/SKILL.md",
+      "installedAs": ".claude/skills/isaaclab-preparing-assets-for-newton/",
+      "license": "BSD-3-Clause",
+      "computedHash": "3f73fe56690ba5aa73136e91dac889d90870ab9005558cb0f3494db824012d90"
+    },
+    "isaaclab-randomizing-with-events": {
+      "source": "isaac-sim/IsaacLab",
+      "sourceType": "github",
+      "ref": "v3.0.0-EA",
+      "commit": "ae37b028ea415c91ea2bc32609efcd759ed2b974",
+      "skillPath": "skills/user/domain-randomization-events/SKILL.md",
+      "installedAs": ".claude/skills/isaaclab-randomizing-with-events/",
+      "license": "BSD-3-Clause",
+      "computedHash": "58b83c06b794cf0048d67cb4331d991a23b8fb1c186ff5cf792ec9291a56b19c"
+    },
+    "isaaclab-selecting-backends": {
+      "source": "isaac-sim/IsaacLab",
+      "sourceType": "github",
+      "ref": "v3.0.0-EA",
+      "commit": "ae37b028ea415c91ea2bc32609efcd759ed2b974",
+      "skillPath": "skills/user/select-backends/SKILL.md",
+      "installedAs": ".claude/skills/isaaclab-selecting-backends/",
+      "license": "BSD-3-Clause",
+      "computedHash": "5908da1109f5b0f6d52efeda78e3f6ff0d0fc5923d856b6d594422fb58776f5c"
+    },
+    "isaaclab-setup-troubleshooting": {
+      "source": "isaac-sim/IsaacLab",
+      "sourceType": "github",
+      "ref": "v3.0.0-EA",
+      "commit": "ae37b028ea415c91ea2bc32609efcd759ed2b974",
+      "skillPath": "skills/user/setup-troubleshooting/SKILL.md",
+      "installedAs": ".claude/skills/isaaclab-setup-troubleshooting/",
+      "license": "BSD-3-Clause",
+      "computedHash": "746985036e4d2c8bf80b9290e273bfd2de8e4cdbbc790c2badddb5f2e933413b"
+    },
+    "isaaclab-training-rl-agents": {
+      "source": "isaac-sim/IsaacLab",
+      "sourceType": "github",
+      "ref": "v3.0.0-EA",
+      "commit": "ae37b028ea415c91ea2bc32609efcd759ed2b974",
+      "skillPath": "skills/user/train-rl-agents/SKILL.md",
+      "installedAs": ".claude/skills/isaaclab-training-rl-agents/",
+      "license": "BSD-3-Clause",
+      "computedHash": "48fc82501159ac8403587fb56e9fc1aae43d83456ae6b45d600f45ea31b7e486"
+    },
+    "isaaclab-transferring-policies-sim-to-sim": {
+      "source": "isaac-sim/IsaacLab",
+      "sourceType": "github",
+      "ref": "v3.0.0-EA",
+      "commit": "ae37b028ea415c91ea2bc32609efcd759ed2b974",
+      "skillPath": "skills/user/isaaclab-transferring-policies-sim-to-sim/SKILL.md",
+      "installedAs": ".claude/skills/isaaclab-transferring-policies-sim-to-sim/",
+      "license": "BSD-3-Clause",
+      "computedHash": "e926baf20b028d2ee8f2c18d4791b5ec417056b1e7a28a91fe2f23b8115d7dfd"
+    },
+    "isaaclab-using-presets": {
+      "source": "isaac-sim/IsaacLab",
+      "sourceType": "github",
+      "ref": "v3.0.0-EA",
+      "commit": "ae37b028ea415c91ea2bc32609efcd759ed2b974",
+      "skillPath": "skills/user/use-presets/SKILL.md",
+      "installedAs": ".claude/skills/isaaclab-using-presets/",
+      "license": "BSD-3-Clause",
+      "computedHash": "1b565ece7a19f4331309f1c5dda37680011b9ed35c7d927ec38adc088f6e7327"
+    },
+    "isaaclab-using-sensors-actuators": {
+      "source": "isaac-sim/IsaacLab",
+      "sourceType": "github",
+      "ref": "v3.0.0-EA",
+      "commit": "ae37b028ea415c91ea2bc32609efcd759ed2b974",
+      "skillPath": "skills/user/use-sensors-actuators/SKILL.md",
+      "installedAs": ".claude/skills/isaaclab-using-sensors-actuators/",
+      "license": "BSD-3-Clause",
+      "computedHash": "a000ce9c891064e05cfa4edec9e872c28f5388e70ca7fc15d03aab61c04c9961"
+    },
+    "navigation-primitives": {
+      "source": "isaac-sim/IsaacSim",
+      "sourceType": "github",
+      "ref": "v6.1.0",
+      "commit": "7c206f75bdadd9e05fc457f19863ca4c3f0cb693",
+      "skillPath": ".claude/skills/navigation-primitives/SKILL.md",
+      "installedAs": ".claude/skills/navigation-primitives/",
+      "license": "Apache-2.0",
+      "computedHash": "d9deb0f2c9ccaadc314221ad6e63fdeb7864295fdb81b480ffb52be67ae0c0d1"
+    },
+    "physics-simulation": {
+      "source": "isaac-sim/IsaacSim",
+      "sourceType": "github",
+      "ref": "v6.1.0",
+      "commit": "7c206f75bdadd9e05fc457f19863ca4c3f0cb693",
+      "skillPath": ".claude/skills/physics-simulation/SKILL.md",
+      "installedAs": ".claude/skills/physics-simulation/",
+      "license": "Apache-2.0",
+      "computedHash": "b07607bf4a0447015d8ad659f1f20a029eb8712f540672ea964c64d097b057d5"
+    },
+    "protect-nebius-infra-details": {
+      "source": "nebius/nebius-physical-ai",
+      "sourceType": "github",
+      "ref": "main",
+      "commit": "bf4788a0a94ce2c2e842f54c5dc39932795d6cc5",
+      "skillPath": "skills/atomic/protect-nebius-infra-details/SKILL.md",
+      "installedAs": ".claude/skills/protect-nebius-infra-details/",
+      "license": "Apache-2.0",
+      "computedHash": "4b1979162dfbec9a9417e9c831132c46336618b4a5a04566e86833e79f5fc167"
+    },
+    "teardown-and-cost": {
+      "source": "nebius/nebius-physical-ai",
+      "sourceType": "github",
+      "ref": "main",
+      "commit": "bf4788a0a94ce2c2e842f54c5dc39932795d6cc5",
+      "skillPath": "skills/atomic/teardown-and-cost/SKILL.md",
+      "installedAs": ".claude/skills/teardown-and-cost/",
+      "license": "Apache-2.0",
+      "computedHash": "96b99540aee77562ff71de0651a271654b419aa272cf80d61306a39eb9036c0c"
+    },
+    "third-party-eula-preflight": {
+      "source": "nebius/nebius-physical-ai",
+      "sourceType": "github",
+      "ref": "main",
+      "commit": "bf4788a0a94ce2c2e842f54c5dc39932795d6cc5",
+      "skillPath": "skills/atomic/third-party-eula-preflight/SKILL.md",
+      "installedAs": ".claude/skills/third-party-eula-preflight/",
+      "license": "Apache-2.0",
+      "computedHash": "1de51b1637e65e073f2e54a306e605233954cef5e74acb386b7b8f50bf6e5e46"
+    },
+    "token-factory": {
+      "source": "nebius/nebius-physical-ai",
+      "sourceType": "github",
+      "ref": "main",
+      "commit": "bf4788a0a94ce2c2e842f54c5dc39932795d6cc5",
+      "skillPath": "skills/tools/token-factory/SKILL.md",
+      "installedAs": ".claude/skills/token-factory/",
+      "license": "Apache-2.0",
+      "computedHash": "b9d77887e31c9e49655d7c40e0dd6c53b3e124c6a2758b5e9255b73a26a7b3b6"
+    },
+    "urdf-mjcf-to-usd-conversion": {
+      "source": "isaac-sim/IsaacSim",
+      "sourceType": "github",
+      "ref": "v6.1.0",
+      "commit": "7c206f75bdadd9e05fc457f19863ca4c3f0cb693",
+      "skillPath": ".claude/skills/urdf-mjcf-to-usd-conversion/SKILL.md",
+      "installedAs": ".claude/skills/urdf-mjcf-to-usd-conversion/",
+      "license": "Apache-2.0",
+      "computedHash": "011d1210b3c03e81c9ce9544828c890075f2aef7aaa7858e9641443c0c7a6abd"
+    },
+    "usd-articulation": {
+      "source": "isaac-sim/IsaacSim",
+      "sourceType": "github",
+      "ref": "v6.1.0",
+      "commit": "7c206f75bdadd9e05fc457f19863ca4c3f0cb693",
+      "skillPath": ".claude/skills/usd-articulation/SKILL.md",
+      "installedAs": ".claude/skills/usd-articulation/",
+      "license": "Apache-2.0",
+      "computedHash": "31bcb8b5ec605d96576330ef377fc802135c7e8f5672f571cdb10cde4ef908d3"
+    },
+    "vm-nebius-auth": {
+      "source": "nebius/nebius-physical-ai",
+      "sourceType": "github",
+      "ref": "main",
+      "commit": "bf4788a0a94ce2c2e842f54c5dc39932795d6cc5",
+      "skillPath": "skills/atomic/vm-nebius-auth/SKILL.md",
+      "installedAs": ".claude/skills/vm-nebius-auth/",
+      "license": "Apache-2.0",
+      "computedHash": "b280af3d6c5f72b47a88801c6540ef4b3c96251d1208e72acbae18687562baed"
     }
   }
 }

@@ -10,3 +10,9 @@ __pycache__/
 *.pyc
 renders/*.gif
 .DS_Store
+
+# NVIDIA-proprietary skills (ovrtx, ovstage, kit-*) must never be committed to this public repo
+.claude/skills/ovrtx-*
+.claude/skills/ovstage-*
+.claude/skills/kit-*
+.claude/skills/cae-*

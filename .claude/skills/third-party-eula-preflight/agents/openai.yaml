@@ -1,0 +1,4 @@
+interface:
+  display_name: "Third-Party EULA Preflight"
+  short_description: "Apply scoped EULA defaults and opt-outs"
+  default_prompt: "Use $third-party-eula-preflight to apply the correct scoped acceptance default or opt-out before this workload runs."
