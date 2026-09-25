@@ -47,17 +47,21 @@ envs/swap/
 
 ---
 
-## Geometry (PROPOSED — lock with Dimitris)
+## Geometry (**LOCKED** — four rows corrected against `robot/SPEC.md`, 15 Sep 2026)
 
 Provisional “slow cheap skid-steer” pack under a ~0.6 m wide body. Change only via this SPEC + Dimitris agreement.
 
+The four rows marked **LOCKED** below were guessed here and have been replaced with the values A
+measured on the compiled model. Source of truth: [`robot/SPEC.md`](../../robot/SPEC.md) §Geometry,
+§Battery pack and §Constraints the dock must respect. Do not re-derive them from this file.
+
 | Part | Size (m) | Notes |
 |---|---|---|
-| Pack outer | `0.30 × 0.20 × 0.10` (X×Y×Z) | Slung under chassis; latch faces −Z toward dock |
+| Pack outer | **`0.20 × 0.45 × 0.055`** (X×Y×Z) **LOCKED** | Was `0.30 × 0.20 × 0.10`. A wide flat slab, not a brick: the 0.22 m wheelbase leaves no fore-aft room. Underside at z = 0.060; latch faces −Z toward dock |
 | Pack mass (viz) | 4.0 kg | Placeholder; not used by scripted controller |
-| Dock pad | `0.90 × 0.70 × 0.04` | Drive-over plate |
-| Lift stroke | `0.00 → 0.12` along +Z | Carriage rises into pack bay |
-| Approach standoff | berth at origin; approach at `(0, −1.50, 0)` | Vehicle +Y is forward when docked |
+| Dock pad | **`1.10 × 1.00 × 0.04`** **LOCKED** | Was `0.90 × 0.70`. Must span the **0.80 m track** — wheels at y = ±0.40 sit 0.10 m inside each lateral edge. A 0.70 m pad missed both wheels entirely |
+| Lift stroke | **`0.00 → 0.060`** along +Z **LOCKED** | Was `0.00 → 0.12`. The pack underside is 60 mm off the ground; 120 mm drives the carriage into the chassis. `scripts/swap_battery.py` still passes its legacy `0.12` constant — `scripts/mujoco_hardware.py` reads that as “raise fully” and normalises it to 0.060 |
+| Approach standoff | berth at origin; approach at **`(−1.50, 0, 0)`** **LOCKED** | Was `(0, −1.50, 0)`. **Vehicle +X is forward when docked**, not +Y: all four wheel hinges have axis `(0,1,0)`, and 8 s of full command measures dx = +2.216 m, dy = 0.000. The frames in `dock.usda` are authored for the old +Y convention and rotate 90° about Z — `(x, y) → (y, −x)` — when the dock is placed in the world |
 
 ### Named frames (on `dock.usda`)
 

@@ -20,9 +20,11 @@ def Xform "Pack" (
         prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsCollisionAPI", "PhysicsMassAPI"]
     )
     {
+        # LOCKED to robot/SPEC.md (15 Sep 2026): 0.20 (X) x 0.45 (Y) x 0.055 (Z).
+        # Was 0.30 x 0.20 x 0.10. Translate keeps the underside on z = 0.
         double size = 1
-        float3 xformOp:scale = (0.30, 0.20, 0.10)
-        double3 xformOp:translate = (0, 0, 0.05)
+        float3 xformOp:scale = (0.20, 0.45, 0.055)
+        double3 xformOp:translate = (0, 0, 0.0275)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
         color3f[] primvars:displayColor = [(0.15, 0.55, 0.35)]
         float physics:mass = 4.0
@@ -38,7 +40,7 @@ def Xform "Pack" (
     # Mate point on the pack top — rover battery_mount attaches here.
     def Xform "mount_frame"
     {
-        double3 xformOp:translate = (0, 0, 0.10)
+        double3 xformOp:translate = (0, 0, 0.055)
         uniform token[] xformOpOrder = ["xformOp:translate"]
     }
 }

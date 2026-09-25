@@ -56,8 +56,10 @@ def Xform "Dock" (
         prepend apiSchemas = ["PhysicsCollisionAPI"]
     )
     {
+        # LOCKED to robot/SPEC.md (15 Sep 2026): must span the 0.80 m track
+        # (wheels at y = +/-0.40). Was 0.90 x 0.70, which missed both wheels.
         double size = 1
-        float3 xformOp:scale = (0.90, 0.70, 0.04)
+        float3 xformOp:scale = (1.10, 1.00, 0.04)
         double3 xformOp:translate = (0, 0, 0.02)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
         color3f[] primvars:displayColor = [(0.35, 0.35, 0.38)]
@@ -92,8 +94,14 @@ def Xform "Dock" (
 
             def Cube "plate"
             {
+                # Narrowed in X to 0.09 so the carriage rises BETWEEN the pack's
+                # retaining straps (x = +/-0.06, inner faces +/-0.048), which
+                # hang 2.5 mm below the pack to z = 0.0575. Was 0.28 x 0.18.
+                # NOTE the z translates in this Xform tree were authored against
+                # the old 0.12 stroke and have NOT been re-derived here - see
+                # envs/swap/dock_mjcf.py for the working heights.
                 double size = 1
-                float3 xformOp:scale = (0.28, 0.18, 0.03)
+                float3 xformOp:scale = (0.09, 0.40, 0.024)
                 double3 xformOp:translate = (0, 0, 0.015)
                 uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
                 color3f[] primvars:displayColor = [(0.80, 0.65, 0.15)]
@@ -106,7 +114,9 @@ def Xform "Dock" (
             rel physics:body1 = </Dock/lift/carriage>
             uniform token physics:axis = "Z"
             float physics:lowerLimit = 0
-            float physics:upperLimit = 0.12
+            # LOCKED to robot/SPEC.md: pack underside is 60 mm off the ground.
+            # Was 0.12, which drives the carriage into the chassis.
+            float physics:upperLimit = 0.060
             float physics:jointFriction = 0
         }
     }
