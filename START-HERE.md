@@ -1,7 +1,12 @@
 # START HERE — Solar Sheep → Physical AI
 
 **Nebius x NVIDIA Global AI Hackathon · Physical AI track**
-Branch: `physical-ai` · read this before touching anything.
+Branch: `real-sim` · read this before touching anything.
+
+> **Updated 25 Sep 2026.** The route to the real simulation (Omniverse on a Nebius GPU) and why:
+> [docs/decisions.md](docs/decisions.md). Which skill to load for each step:
+> [docs/skills.md](docs/skills.md) — the skills are already in `.claude/skills/` and load
+> automatically. `physical-ai` is the frozen 15 Sep state.
 
 ```
 DEADLINE   30 Oct 2026, 10:00 PDT = 17:00 GMT
@@ -131,63 +136,57 @@ weeks building:
 dock, and the herd orchestration. Building on the sponsor's repo also scores directly against the
 top-weighted criterion.
 
+> **25 Sep:** we use npa's **skills** (token-factory, teardown-and-cost, gpu-selection, …) but not its
+> managed Isaac Lab path: it pins an older Isaac (whose importer drops static friction), its Isaac Lab
+> end-to-end run is still "pending W9", and it cannot target `gpu-rtx6000-a` or our Nebius CLI
+> version. See [docs/decisions.md](docs/decisions.md) D7–D8.
+
 ---
 
 ## ⛔ Isaac Sim does NOT run on our laptops
 
-From NVIDIA's own `isaac-sim-installation` skill: the Docker path is *"native-Linux x86_64 only and
-**explicitly unsupported on Windows/WSL**"*, and the pip path needs **Python 3.12**.
+Isaac Sim needs an **NVIDIA RTX GPU** (RT cores). Our laptops have Intel integrated graphics, so
+**Isaac Sim and Isaac Lab live only on the rented Nebius Linux GPU box**, in NVIDIA's container.
+Laptops and WSL are for the Nebius CLI, the MuJoCo reference model, the orchestrator and tests.
 
-**So Isaac Sim lives only on the rented Nebius Linux GPU box.** WSL is for the `npa` CLI, nothing
-else. Consequences:
-
-- Inner dev loop is `isaac-sim-remote` — a **loopback-only** IPC server on `127.0.0.1:8226`. Reach it
-  over an **SSH tunnel** to the box. Never publish that port off-host.
-- `isaac-sim-orchestrator` owns the shared env contract (`$ISAAC_SIM_DIR`, `$ISAAC_LAB_DIR`,
-  `$WORKSPACE_DIR`) every other Isaac skill assumes. Whoever stands up the box reads it first.
+- Skills for standing up the box, in order: [docs/skills.md](docs/skills.md) W6.
 - Run `isaac-sim-validator` on every script before it is filmed or handed over — it catches the
   **black-frame / missing-lights** failure that would silently ruin our ≥1-minute footage.
 
-## ✅ GPU — VERIFIED, not assumed
+## GPU — what actually works (updated 25 Sep 2026)
 
-Checked with real API calls against our actual project on 15 Sep 2026:
+On 15 Sep the RTX PRO 6000 in us-central1 showed plenty of **quota** but **never booted**: the
+operation log shows 4× `NotEnoughResources` — Nebius had no hardware free there. Quota is not
+capacity.
 
-```
-account    Dimitrios Koutsoumpos · tenant-e00yd9pgnqbpbq8sxh
-project    project-u00vpbp7kc00vhag08bn1s  "default-project-us-central1"
-region     us-central1                      state ACTIVE
-
-platform   gpu-rtx6000  "NVIDIA® RTX PRO 6000 with Intel Granite Rapids"   ✅ AVAILABLE
-preset     1gpu-24vcpu-218gb   (1 GPU · 24 vCPU · 218 GiB)
-           8gpu-192vcpu-1744gb (8 GPU)
-
-quota      compute.instance.gpu.rtx6000        32     ← plenty
-           compute.instance.preemptible.count   8     ← the cheap tier
-           compute.instance.count              12
-           compute.gpucluster.count             5
-```
-
-RTX PRO 6000 is also available in `eu-south1` and `uk-south2` if we ever need to move.
+- The same GPU as platform **`gpu-rtx6000-a`** is available in **uk-south2** and **eu-south1**.
+  Check capacity *before* creating anything:
+  `nebius capacity resource-advice list --parent-id "$NEBIUS_TENANT_ID"`
+- Boot image family **`ubuntu24.04-cuda13.0`** (driver 580.x) — RTX PRO 6000 rejects the cuda12
+  images. Isaac Lab EA wants driver ≥ 580.95.05.
+- Route: a plain VM + NVIDIA's Isaac Lab container, not npa's managed path — why:
+  [docs/decisions.md](docs/decisions.md) D7–D8; which skills to load: [docs/skills.md](docs/skills.md) W6.
+- **Delete the VM after every session:** `bash scripts/teardown.sh --yes` (keeps only the data disk).
 
 **Isaac Lab needs RT cores.** From Nebius's own skill: *"Use L40S or RTX Pro 6000… Rendering,
 camera-bearing tasks, and deployed workbenches require RT cores and **cannot target B200, H100, or
-H200**."* Our project also exposes `gpu-h200-sxm` and `gpu-b200-sxm` — **do not use them.**
-
-⚠️ **`gpu-rtx6000` is not a serverless platform** — it's the managed-Kubernetes / VM path. Provision
-via `npa cluster` or a VM, not `--runtime serverless`.
+H200**."* Our projects also expose `gpu-h200-sxm` and `gpu-b200-sxm` — **do not use them.**
 
 **Credits:** Builders & Brews attendees get **$100 Token Factory + $100 AI Cloud**. The AI Cloud $100
-is the GPU budget (~100 h preemptible). Plus `NEBIUS-DEVPOST-GLOBAL26` ($25) and the Builders
-Program ($25). Apply AI Cloud codes at **console.nebius.com → Billing → Apply promo code**.
+is the GPU budget (RTX PRO 6000: $1.80/h on-demand, $0.95/h preemptible). Plus `NEBIUS-DEVPOST-GLOBAL26`
+($25) and the Builders Program ($25). Apply AI Cloud codes at **console.nebius.com → Billing → Apply
+promo code**.
 
 ### Getting on the box yourself
+
+Tenant and project IDs live in `.env` (`NEBIUS_TENANT_ID`, `NEBIUS_PROJECT_ID`), never in the repo.
 
 ```bash
 # in WSL2 Ubuntu (the CLI is not Windows-native)
 curl -sSL https://storage.eu-north1.nebius.cloud/cli/install.sh | bash
 exec -l $SHELL
 nebius profile create --profile solar --endpoint api.nebius.cloud \
-  --federation-endpoint auth.nebius.com --parent-id project-u00vpbp7kc00vhag08bn1s
+  --federation-endpoint auth.nebius.com --parent-id "$NEBIUS_PROJECT_ID"
 # opens a browser tab — log in with the Google account on the tenant
 nebius iam whoami          # verify
 ```
@@ -247,50 +246,29 @@ max slope, roughness amplitude, obstacle density, friction range and patch size 
 
 ## First tasks
 
-### Everyone — install the skills (15 min)
+### Everyone — skills are already installed
 
-Three official sets. **Nebius's is the primary one**, not a supplement — it drives the cloud we are
-actually billed on.
-
-```bash
-npx skills add nvidia/skills          # NVIDIA official marketplace (nvidia-official)
-git clone https://github.com/nebius/nebius-physical-ai    # 97 skills in .claude/skills
-git clone https://github.com/isaac-sim/IsaacSim           # ~39 skills in .claude/skills
-# copy their .claude/skills/* into this project's .claude/skills/
-```
-
-⭐ **Then everyone reads `workflows/first-run-setup`** before anything else:
-> "get from zero to a first verified result — an ordered, gated path through install, configure,
-> credential preflight, cheapest-proof workload, then cluster provisioning, with an **explicit stop
-> condition at every step**."
-> "The failure mode this skill exists to prevent is spending an hour provisioning a GPU cluster and
-> discovering at stage three that a credential did not have exact artifact access."
-
-That *is* our access-check and spike phase, already written by the sponsor, with gates. Use it
-instead of inventing our own.
-
-Full per-person skill lists: **[`docs/skills.md`](docs/skills.md)**.
+29 pinned skills (Isaac Lab 3.0 EA, Isaac Sim 6.1, Nebius npa) are vendored in `.claude/skills/`
+and load automatically in Claude Code on Windows and Linux. Nothing to install.
+Which to load for each step, in order: **[`docs/skills.md`](docs/skills.md)**.
 
 ### Dimitris — the rover
 Write `robot/SPEC.md`: joint/wheel names, action space, observation space, the **downward-facing
 battery swap frame** (B is blocked on exactly this), and whether the panel tilt is fixed or has one
 low-power pitch actuator.
-Skills: `workflows/train-policy` → `tools/isaac-lab` → `urdf-mjcf-to-usd-conversion` →
-`usd-articulation` → `physics-simulation` → `navigation-primitives`.
+Skills: [docs/skills.md](docs/skills.md) W1–W3 and W8.
 
 ### B — the battery swap
 **Script it, don't train it.** Contact-rich insertion is a twenty-year open problem; real swap docks
 solve it *mechanically* — published stations swap in **45 s** with a carrier tolerating **±9°**
 misalignment. Learned approach + scripted mechanism. The intelligence goes into *docking*.
 Settle the swap geometry with Dimitris in five minutes → `envs/swap/SPEC.md`.
-Skills: `usd-articulation` → **`manipulation-ik`** → `motion-generation` → `spatial-reasoning`.
+Skills: [docs/skills.md](docs/skills.md) W4.
 
 ### C — GPU first, then the world
 Get an **RTX PRO 6000** up and Isaac Sim running headless. That unblocks everyone. Then publish
 `scene/SPEC.md` — `(row, slot)` addressing, dock pose, Z-up/metres, and the **terrain statistics**.
-Skills: `workflows/first-run-setup` → `atomic/gpu-selection` → `atomic/teardown-and-cost` →
-`tools/gpu-cluster-provisioning` → `tools/token-factory` → `isaac-sim-headless-deployment` →
-`usd-composition-architecture`.
+Skills: [docs/skills.md](docs/skills.md) W5–W7.
 
 ---
 

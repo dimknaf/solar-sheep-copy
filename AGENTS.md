@@ -1,8 +1,21 @@
 # AGENTS.md — guidance for AI agents (and humans) working in this repo
 
-Solar Sheep is a small, dependency-free browser simulation. It is intentionally
+This repo has **two parts** with different rules:
+
+1. **The browser economics sim** — `index.html`, `config.js`, `simulation.js`,
+   `render.js`, `main.js` (+ `.tmp-frames.js`, `.tmp-shot.html`). Dependency-free
+   vanilla JS. **Everything from here down to "Where to make a given change" applies
+   ONLY to these files.**
+2. **The real simulation (Python / NVIDIA Omniverse)** — `robot/`, `envs/`,
+   `renders/`, `scripts/`, `docs/`. Python with pinned dependencies, heading for Isaac
+   Lab on a Nebius GPU. See **[Part 2](#part-2--the-real-simulation-python--omniverse)**
+   at the end of this file.
+
+## Part 1 — the browser economics sim
+
+Solar Sheep's browser sim is small and dependency-free. It is intentionally
 plain: no framework, no build, no package manager, no tests directory. Read this
-before changing anything so you keep it that way.
+before changing those files so you keep it that way.
 
 ## Ground rules
 
@@ -252,3 +265,57 @@ checks the sim advances, balances, and doesn't throw, not pixel output.
 - New UI control or readout → `index.html` + `main.js`.
 - Keep `CONFIG` as the single source of truth; don't hardcode magic numbers
   in the sim when a config key fits.
+
+---
+
+## Part 2 — the real simulation (Python / Omniverse)
+
+Goal: a real simulation for sim-to-real, built with NVIDIA's official tools and run on
+a Nebius GPU — Isaac Lab (training) on Isaac Sim (Omniverse's robot app, PhysX
+physics). Why each choice was made: [docs/decisions.md](docs/decisions.md).
+
+### Start here
+- **Branch:** all work is on `real-sim`. `physical-ai` and `main` are frozen — never
+  commit, push, reset or tag them.
+- **Skills:** [docs/skills.md](docs/skills.md) says which skill to load for each step,
+  in order. The 29 vendored skills live in `.claude/skills/<name>/` as real
+  directories and load automatically. Never add symlinks there (Windows checks them
+  out as 30-byte stubs); to add a skill, follow docs/skills.md §5.
+- **Isaac Lab skills** link to docs with `../../../docs/source/...`; follow those
+  inside `~/IsaacLab` (tag v3.0.0-EA) in WSL or on the VM.
+- **Pins** (Isaac Lab v3.0.0-EA + Isaac Sim 6.1.0, NGC container, driver ≥ 580.95.05):
+  docs/skills.md §1. Check any number or command a skill gives against them.
+
+### Layout
+| Path | What |
+|---|---|
+| `robot/rover.xml`, `robot/SPEC.md` | MuJoCo model of the rover and its locked, measured spec (the targets the Omniverse model must match) |
+| `envs/swap/` | Battery-swap dock: engine-agnostic phase machine + `DockHardware` Protocol, MuJoCo dock (`dock_mjcf.py`), 6 tests |
+| `envs/traverse/` | MJX + Brax trainer — deadline-only fallback, not developed further |
+| `renders/` | MuJoCo renders and the swap demo (`swap_demo.py`) |
+| `scripts/teardown.sh` | Deletes every Nebius VM and disk in the tenant except the kept data disk |
+
+### Python environment
+- Windows: `.venv` at the repo root. WSL: a separate clone at `~/solar-sheep` on the
+  **Linux filesystem** — run Linux-bound work there, never from `/mnt/c`.
+- Install: `uv pip install -r requirements.txt --override requirements-overrides.txt`
+  (the override is intentional; see the header of requirements.txt).
+- Line endings are set by `.gitattributes`: shell scripts and skills are always LF.
+
+### Verify after touching the swap or rover code
+```sh
+python -m envs.swap.tests.test_swap_phases                          # expect: 6 tests OK
+python renders/swap_demo.py --no-video --out /tmp/sd.mp4            # expect: ALL ASSERTIONS PASSED
+```
+
+### Nebius and secrets
+- Keys only in `.env` (gitignored). Never commit tenant/project IDs, endpoints or
+  credentials; read them from the environment. Before committing anything that
+  mentions Nebius, scan the staged diff (skill: `protect-nebius-infra-details`):
+  `git diff --cached | (cd ~/npa-src/npa/src && python3 -m npa.guardrails.confidentiality --repo-root /tmp --built-in-nebius-infra --stdin-source staged-diff --stdin-is-diff)`
+- No GPU spend without the owner's explicit go. **Delete the VM after every session**
+  (`bash scripts/teardown.sh --yes`); only the persistent data disk stays.
+
+### Commits
+- Explicit pathspecs only (never `git add -A`); no force-push; no AI co-author
+  trailers.

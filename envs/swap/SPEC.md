@@ -1,7 +1,7 @@
 # Swap dock — SPEC
 
 **Owner: B** · folder `envs/swap/` · layer `dock.usda` (composed via `stage.usda`).  
-**Status:** IMPLEMENTED scaffold (scripted phases + USDA). Geometry numbers marked **PROPOSED** until Dimitris locks the rover battery frame in `robot/SPEC.md`.
+**Status (25 Sep 2026):** scripted phase machine + MuJoCo dock (`dock_mjcf.py`) working — `renders/swap_demo.py` passes all assertions. Geometry rows below are **LOCKED** against `robot/SPEC.md`. The `.usda` files are half-migrated (+X sizes, old +Y frames) and will be regenerated from `dock_mjcf.py` through the official Isaac Sim importer, not hand-edited (see `docs/decisions.md` D6).
 
 ---
 
@@ -75,11 +75,13 @@ measured on the compiled model. Source of truth: [`robot/SPEC.md`](../../robot/S
 
 Rover-side frame (Dimitris owns): **`/Sheep/battery_mount`** (name TBD in `robot/SPEC.md`) — downward-facing, must align to `pack_attach` when berthing.
 
-### Berth tolerance (PROPOSED)
+### Berth tolerance (LOCKED — see `docs/integration-A-B.md` §4)
 
 Aligned enough to start lift if all hold:
 
-- XY error ≤ **0.08 m**
+- XY error ≤ **0.035 m** (was 0.08 m, which is geometrically impossible at any yaw for a
+  0.450 m pack between tyre faces at ±0.370 m). The code constant `XY_TOL_M` in
+  `scripts/swap_battery.py` is still 0.08 and changes with the dock rebuild (gate G6).
 - Yaw error ≤ **9°** (0.157 rad) — matches published station misalignment class
 - Pack mount height vs carriage top ≤ **0.03 m** gap before lift
 
