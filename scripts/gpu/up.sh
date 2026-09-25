@@ -23,10 +23,10 @@ REGION="${REGION:-uk-south2}"
 PLATFORM="${PLATFORM:-gpu-rtx6000-a}"
 PRESET="${PRESET:-1gpu-24vcpu-218gb}"
 IMAGE_FAMILY="${IMAGE_FAMILY:-ubuntu24.04-cuda13.0}"
-NAME="${NAME:-solar-isaac}"
+VM_NAME="${VM_NAME:-solar-isaac}"   # not NAME: WSL sets NAME to the PC name
 BOOT_GIB="${BOOT_GIB:-200}"
 DATA_DISK="${KEEP_DISK:-solar-data}"
-DATA_GIB="${DATA_GIB:-300}"
+DATA_GIB="${DATA_GIB:-200}"
 PREEMPTIBLE="${PREEMPTIBLE:-0}"
 KEY="${SSH_KEY:-$HOME/.ssh/solar_nebius}"
 : "${NEBIUS_TENANT_ID:?Set NEBIUS_TENANT_ID in the environment or .env}"
@@ -59,7 +59,7 @@ print(' '.join(i['metadata']['name'] for i in d.get('items', [])))")
 
 echo "=== plan ==="
 echo "  project    (the $REGION project of the tenant)"
-echo "  instance   $NAME  $PLATFORM $PRESET  $([ "$PREEMPTIBLE" = 1 ] && echo preemptible || echo on-demand)"
+echo "  instance   $VM_NAME  $PLATFORM $PRESET  $([ "$PREEMPTIBLE" = 1 ] && echo preemptible || echo on-demand)"
 echo "  boot disk  ${BOOT_GIB} GiB network_ssd from $IMAGE_FAMILY (deleted with the VM)"
 echo "  data disk  $DATA_DISK ${DATA_GIB} GiB $([ -n "$DISK_ID" ] && echo '(exists, reattached)' || echo '(will be created, kept on teardown)')"
 echo "  ssh key    $KEY"
@@ -68,7 +68,7 @@ echo "  ssh key    $KEY"
 if [ "${1:-}" != "--yes" ]; then
   echo; echo "Nothing created. Re-run with --yes to create (starts billing)."; exit 0
 fi
-case " $EXISTING " in *" $NAME "*) echo "An instance named $NAME already exists - tear it down first." >&2; exit 1;; esac
+case " $EXISTING " in *" $VM_NAME "*) echo "An instance named $VM_NAME already exists - tear it down first." >&2; exit 1;; esac
 
 [ -f "$KEY" ] || { mkdir -p "$(dirname "$KEY")"; ssh-keygen -q -t ed25519 -N '' -C solar-nebius -f "$KEY"; }
 
@@ -82,11 +82,11 @@ USER_DATA=$(sed "s|__SSH_PUBKEY__|$(cat "$KEY.pub")|" scripts/gpu/cloud-init.yam
 PREEMPT_ARGS=()
 [ "$PREEMPTIBLE" = 1 ] && PREEMPT_ARGS=(--preemptible-on-preemption STOP --preemptible-priority 1)
 
-echo "=== creating instance $NAME (async) ==="
-OP=$(nebius compute instance create --async --format json --parent-id "$PROJECT" --name "$NAME" \
+echo "=== creating instance $VM_NAME (async) ==="
+OP=$(nebius compute instance create --async --format json --parent-id "$PROJECT" --name "$VM_NAME" \
   --resources-platform "$PLATFORM" --resources-preset "$PRESET" \
   --boot-disk-attach-mode read_write \
-  --boot-disk-managed-disk-name "$NAME-boot" --boot-disk-managed-disk-type network_ssd \
+  --boot-disk-managed-disk-name "$VM_NAME-boot" --boot-disk-managed-disk-type network_ssd \
   --boot-disk-managed-disk-size-gibibytes "$BOOT_GIB" \
   --boot-disk-managed-disk-source-image-family-image-family "$IMAGE_FAMILY" \
   --secondary-disks "[{\"attach_mode\":\"read_write\",\"device_id\":\"solar-data\",\"existing_disk\":{\"id\":\"$DISK_ID\"}}]" \
@@ -110,7 +110,7 @@ IP=$(nebius compute instance get --id "$INST" --format json | json "
 nics = d.get('status', {}).get('network_interfaces', [])
 print(nics[0].get('public_ip_address', {}).get('address', '').split('/')[0] if nics else '')")
 echo
-echo "=== UP: $NAME in $REGION ==="
+echo "=== UP: $VM_NAME in $REGION ==="
 echo "  ssh -i $KEY solar@$IP"
 echo "  first-boot setup log: ssh ... 'tail -f /var/log/solar-setup.log'  (done: /var/lib/solar-setup.done)"
 echo "  then: scp scripts/gpu/smoke.sh solar@$IP: && ssh ... 'bash smoke.sh'"
