@@ -17,7 +17,7 @@
 set -euo pipefail
 export PATH="$PATH:$HOME/.nebius/bin"
 cd "$(dirname "$0")/.."
-if [ -f .env ]; then set -a; . ./.env; set +a; fi
+if [ -f .env ]; then set -a; . <(tr -d '\r' < .env); set +a; fi
 KEEP_DISK="${KEEP_DISK-solar-data}"
 
 # Print one line per item of a nebius JSON list: id, then the requested fields.

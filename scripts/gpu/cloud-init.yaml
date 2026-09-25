@@ -1,0 +1,89 @@
+#cloud-config
+# First-boot setup for the Solar Sheep GPU box (Nebius, image family ubuntu24.04-cuda13.0).
+# scripts/gpu/up.sh substitutes __SSH_PUBKEY__ and passes this as --cloud-init-user-data.
+# Progress: /var/log/solar-setup.log on the box; done when /var/lib/solar-setup.done exists.
+# (Do not poll with `cloud-init status --wait` - it hangs on some CUDA 13 images.)
+users:
+  - name: solar
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - __SSH_PUBKEY__
+
+write_files:
+  - path: /usr/local/sbin/solar-setup.sh
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euxo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+
+      # 1. Persistent data disk (attached with device_id "solar-data"): holds Docker
+      #    images, Isaac caches, checkpoints and videos across sessions.
+      DEV=/dev/disk/by-id/virtio-solar-data
+      for _ in $(seq 60); do [ -e "$DEV" ] && break; sleep 2; done
+      if [ -e "$DEV" ]; then
+        blkid "$DEV" >/dev/null 2>&1 || mkfs.ext4 -q -L solar-data "$DEV"
+        mkdir -p /data
+        grep -q ' /data ' /etc/fstab || echo "$DEV /data ext4 defaults,nofail 0 2" >> /etc/fstab
+        mountpoint -q /data || mount /data
+      else
+        echo "WARNING: data disk not attached; using the boot disk (lost on teardown)"
+        mkdir -p /data
+      fi
+
+      # 2. Docker + NVIDIA Container Toolkit, Docker data on the data disk.
+      command -v docker >/dev/null || apt-get install -y -q docker.io
+      if ! command -v nvidia-ctk >/dev/null; then
+        curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+          | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+        curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+          | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+          > /etc/apt/sources.list.d/nvidia-container-toolkit.list
+        apt-get update -q
+        apt-get install -y -q nvidia-container-toolkit
+      fi
+      systemctl stop docker || true
+      mkdir -p /etc/docker /data/docker
+      python3 - <<'EOF'
+      import json, os
+      p = "/etc/docker/daemon.json"
+      cfg = json.load(open(p)) if os.path.exists(p) and os.path.getsize(p) else {}
+      cfg["data-root"] = "/data/docker"
+      json.dump(cfg, open(p, "w"), indent=2)
+      EOF
+      nvidia-ctk runtime configure --runtime=docker
+      systemctl start docker
+      usermod -aG docker solar
+
+      # 3. NVIDIA EGL/GL user-space libraries. Some CUDA images ship the compute driver
+      #    without them, and Isaac Sim needs them even headless. Adapted from
+      #    nebius/nebius-physical-ai (Apache-2.0) npa/src/npa/deploy/terraform/cloud_init.yaml.tpl.
+      CFG_PKG="$(dpkg-query -W -f='${Package}\n' 'libnvidia-cfg1-*' 2>/dev/null | sed -n 's/^\(libnvidia-cfg1-[0-9][0-9]*\)$/\1/p' | head -n 1)"
+      if [ -n "$CFG_PKG" ]; then
+        BRANCH="${CFG_PKG##libnvidia-cfg1-}"
+        VERSION="$(dpkg-query -W -f='${Version}' "$CFG_PKG")"
+        if ! ldconfig -p | grep -q 'libEGL_nvidia.so.0'; then
+          apt-get install -y -q "libnvidia-common-$BRANCH=$VERSION" "libnvidia-gl-$BRANCH=$VERSION" \
+            libnvidia-egl-gbm1 libnvidia-egl-wayland1 libnvidia-egl-xcb1 libnvidia-egl-xlib1
+          ldconfig
+        fi
+        if [ ! -f /usr/share/glvnd/egl_vendor.d/10_nvidia.json ]; then
+          install -d -m 0755 /usr/share/glvnd/egl_vendor.d
+          printf '{\n  "file_format_version" : "1.0.0",\n  "ICD" : { "library_path" : "libEGL_nvidia.so.0" }\n}\n' \
+            > /usr/share/glvnd/egl_vendor.d/10_nvidia.json
+        fi
+      else
+        echo "WARNING: no libnvidia-cfg1-* package; skipped EGL user-space repair"
+      fi
+      apt-get install -y -q vulkan-tools || true
+
+      # 4. Host folders for Isaac caches, logs and runs, writable by the container's uid 1000.
+      mkdir -p /data/isaac-sim/{cache/kit,cache/ov,cache/pip,cache/glcache,cache/computecache,logs,data,documents} \
+               /data/runs
+      chown -R 1000:1000 /data/isaac-sim /data/runs
+
+      touch /var/lib/solar-setup.done
+
+runcmd:
+  - [bash, -c, "/usr/local/sbin/solar-setup.sh > /var/log/solar-setup.log 2>&1"]
