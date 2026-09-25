@@ -10,7 +10,8 @@
 # NOT given (PRIVACY_CONSENT is left unset).
 
 set -uo pipefail
-IMAGE="${IMAGE:-nvcr.io/nvidia/isaac-lab:3.0.0-rc1}"
+BASE="nvcr.io/nvidia/isaac-lab:3.0.0-rc1"
+IMAGE="${IMAGE:-solar/isaac-lab:3.0.0-rc1-video}"   # BASE + video extra (scripts/gpu/Dockerfile)
 MIN_DRIVER="580.95.05"
 ITER="${ITER:-30}"
 fails=0
@@ -36,9 +37,11 @@ ldconfig -p | grep -q libnvidia-encode && pass "NVENC: libnvidia-encode" || warn
 docker info >/dev/null 2>&1 && pass "docker" || { fail "docker not usable (log out/in for the docker group?)"; exit 1; }
 [ "$fails" -eq 0 ] || { echo "host checks failed ($fails) - fix before pulling the 16 GB image"; exit 1; }
 
-echo "=== 2. Isaac Lab container: $IMAGE ==="
-docker pull -q "$IMAGE" && pass "pulled $(docker image inspect "$IMAGE" --format '{{.Id}}' | cut -c1-19)" \
+echo "=== 2. Isaac Lab container: $BASE ==="
+docker pull -q "$BASE" && pass "pulled $BASE $(docker image inspect "$BASE" --format '{{.Id}}' | cut -c1-19)" \
   || { fail "docker pull"; exit 1; }
+docker build -q -t "$IMAGE" "$(dirname "$0")" >/dev/null && pass "built $IMAGE (adds the video extra)" \
+  || { fail "docker build (scripts/gpu/Dockerfile)"; exit 1; }
 
 # The image has no uv: Isaac Lab lives in Isaac Sim's bundled Python, set up the way
 # /isaac-sim/python.sh does it.

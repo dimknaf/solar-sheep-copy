@@ -11,7 +11,7 @@
 # telemetry consent is not given.
 
 set -euo pipefail
-IMAGE="${IMAGE:-nvcr.io/nvidia/isaac-lab:3.0.0-rc1}"
+IMAGE="${IMAGE:-solar/isaac-lab:3.0.0-rc1-video}"   # built by smoke.sh from scripts/gpu/Dockerfile
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 C=/data/isaac-sim
 [ $# -ge 1 ] || { echo "usage: $0 <script.py relative to the repo> [args...]" >&2; exit 2; }
