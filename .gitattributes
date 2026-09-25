@@ -1,0 +1,21 @@
+# Text is stored with LF in the repo; checkout uses the platform default,
+# except where noted below.
+* text=auto
+
+# Shell scripts run in WSL / Linux, even from a Windows checkout
+# (CRLF broke scripts/teardown.sh with "$'\r': command not found").
+*.sh text eol=lf
+
+# Skills are read by agents on Windows and Linux alike.
+.claude/skills/** text eol=lf
+
+# Binaries
+*.png binary
+*.jpg binary
+*.gif binary
+*.mp4 binary
+*.pkl binary
+*.npy binary
+*.usdc binary
+*.usdz binary
+*.sig binary
