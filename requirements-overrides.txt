@@ -1,0 +1,4 @@
+# Used with: uv pip install -r requirements.txt --override requirements-overrides.txt
+# flax 0.12.8 declares jax>=0.10.0, but brax 0.14.2 needs jax 0.9.x (see requirements.txt).
+jax==0.9.2
+jaxlib==0.9.2

@@ -7,8 +7,14 @@
 #    jax 0.10 removed jax.device_put_replicated, which brax 0.14.2 still calls
 #    (brax/training/agents/ppo/train.py:756) — the run dies at PPO start with
 #    AttributeError. 0.9.2 keeps it (deprecated but present).
-#    Note flax 0.12.8 declares jax>=0.10.0, so pip prints a dependency-conflict
-#    warning on install. It is a false alarm here — verified working.
+#    Note flax 0.12.8 declares jax>=0.10.0, so a resolver rejects this set as
+#    written. It is a false alarm here — verified working. Install it with the
+#    override file, which forces jax 0.9.2 past flax's declared constraint:
+#
+#      uv pip install -r requirements.txt --override requirements-overrides.txt
+#
+#    Verified 25 Sep 2026 in a fresh WSL clone (Python 3.11): swap tests 6/6,
+#    renders/swap_demo.py --no-video -> ALL ASSERTIONS PASSED.
 
 jax==0.9.2
 jaxlib==0.9.2
@@ -26,7 +32,7 @@ scipy==1.17.1
 # ON THE NEBIUS GPU BOX, install the CUDA build of jaxlib instead of the two
 # lines above — same version, CUDA wheel:
 #
-#   pip install -r requirements.txt
+#   uv pip install -r requirements.txt --override requirements-overrides.txt
 #   pip install -U --force-reinstall "jax[cuda12]==0.9.2"
 #   python -c "import jax; print(jax.default_backend(), jax.devices())"   # must say 'gpu'
 #
