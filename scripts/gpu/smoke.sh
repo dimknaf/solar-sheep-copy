@@ -40,6 +40,9 @@ echo "=== 2. Isaac Lab container: $IMAGE ==="
 docker pull -q "$IMAGE" && pass "pulled $(docker image inspect "$IMAGE" --format '{{.Id}}' | cut -c1-19)" \
   || { fail "docker pull"; exit 1; }
 
+# The image has no uv: Isaac Lab lives in Isaac Sim's bundled Python, set up the way
+# /isaac-sim/python.sh does it.
+ISAAC_ENV='export CARB_APP_PATH=/isaac-sim/kit ISAAC_PATH=/isaac-sim EXP_PATH=/isaac-sim/apps; source /isaac-sim/setup_python_env.sh; export PATH=/isaac-sim/kit/python/bin:$PATH; cd /workspace/isaaclab'
 C=/data/isaac-sim
 RUN=(docker run --rm --gpus all --network=host -e ACCEPT_EULA=Y --entrypoint bash
   -v "$C/cache/kit:/isaac-sim/kit/cache:rw" -v "$C/cache/ov:/root/.cache/ov:rw"
@@ -48,17 +51,17 @@ RUN=(docker run --rm --gpus all --network=host -e ACCEPT_EULA=Y --entrypoint bas
   -v "$C/data:/root/.local/share/ov/data:rw" -v "$C/documents:/root/Documents:rw"
   -v /data/runs:/workspace/isaaclab/logs:rw "$IMAGE")
 
-"${RUN[@]}" -lc '
-  cd /workspace/isaaclab 2>/dev/null || cd /workspace/IsaacLab
-  echo "isaaclab at: $(pwd)  version: $(cat VERSION 2>/dev/null)  commit: $(git rev-parse --short HEAD 2>/dev/null || echo n/a)"
-  uv run isaaclab train --help 2>&1 | grep -E -- "--(max_iterations|video|viz)" | head -5
-' || fail "container start"
+"${RUN[@]}" -lc "
+  $ISAAC_ENV
+  echo \"isaaclab at: \$(pwd)  version: \$(cat VERSION 2>/dev/null)\"
+  isaaclab train --rl_library rsl_rl --help 2>&1 | grep -E -- '--(max_iterations|video|viz)' | head -5
+" || fail "container start"
 
 echo "=== 3. train Cartpole ($ITER iterations, headless) ==="
 T0=$(date +%s)
 "${RUN[@]}" -lc "
-  cd /workspace/isaaclab 2>/dev/null || cd /workspace/IsaacLab
-  timeout 3600 uv run isaaclab train --rl_library rsl_rl --task Isaac-Cartpole --run_name smoke \
+  $ISAAC_ENV
+  timeout 3600 isaaclab train --rl_library rsl_rl --task Isaac-Cartpole --run_name smoke \
     --max_iterations $ITER --viz none
 " > /data/runs/smoke_train.log 2>&1 && pass "trained in $(( $(date +%s) - T0 )) s" \
   || fail "training (see /data/runs/smoke_train.log)"
@@ -66,8 +69,8 @@ grep -iE "physics|backend|Mean reward|mean_reward|Learning iteration $((ITER - 1
 
 echo "=== 4. play the checkpoint and record a video ==="
 "${RUN[@]}" -lc "
-  cd /workspace/isaaclab 2>/dev/null || cd /workspace/IsaacLab
-  timeout 1800 uv run isaaclab play --rl_library rsl_rl --task Isaac-Cartpole --num_envs 16 \
+  $ISAAC_ENV
+  timeout 1800 isaaclab play --rl_library rsl_rl --task Isaac-Cartpole --num_envs 16 \
     --checkpoint latest --video --video_length 300 --viz none
 " > /data/runs/smoke_play.log 2>&1 && pass "played the checkpoint" \
   || fail "play/video (see /data/runs/smoke_play.log)"
