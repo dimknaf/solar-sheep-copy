@@ -82,6 +82,7 @@ write_files:
       mkdir -p /data/isaac-sim/{cache/kit,cache/ov,cache/pip,cache/glcache,cache/computecache,logs,data,documents} \
                /data/runs
       chown -R 1000:1000 /data/isaac-sim /data/runs
+      chmod 0777 /data/runs   # the container writes as uid 1000, the solar login user is 1001
 
       touch /var/lib/solar-setup.done
 

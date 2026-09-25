@@ -83,7 +83,7 @@ PREEMPT_ARGS=()
 [ "$PREEMPTIBLE" = 1 ] && PREEMPT_ARGS=(--preemptible-on-preemption STOP --preemptible-priority 1)
 
 echo "=== creating instance $VM_NAME (async) ==="
-OP=$(nebius compute instance create --async --format json --parent-id "$PROJECT" --name "$VM_NAME" \
+CREATE_OUT=$(nebius compute instance create --async --format json --parent-id "$PROJECT" --name "$VM_NAME" \
   --resources-platform "$PLATFORM" --resources-preset "$PRESET" \
   --boot-disk-attach-mode read_write \
   --boot-disk-managed-disk-name "$VM_NAME-boot" --boot-disk-managed-disk-type network_ssd \
@@ -91,7 +91,10 @@ OP=$(nebius compute instance create --async --format json --parent-id "$PROJECT"
   --boot-disk-managed-disk-source-image-family-image-family "$IMAGE_FAMILY" \
   --secondary-disks "[{\"attach_mode\":\"read_write\",\"device_id\":\"solar-data\",\"existing_disk\":{\"id\":\"$DISK_ID\"}}]" \
   --network-interfaces "[{\"name\":\"eth0\",\"subnet_id\":\"$SUBNET\",\"ip_address\":{},\"public_ip_address\":{}}]" \
-  --cloud-init-user-data "$USER_DATA" "${PREEMPT_ARGS[@]}" | json "print(d.get('id') or d['metadata']['id'])")
+  --cloud-init-user-data "$USER_DATA" "${PREEMPT_ARGS[@]}" 2>&1) || { echo "$CREATE_OUT"; exit 1; }
+# --async does not print JSON despite --format json (seen 25 Sep, CLI 0.12.277): take the id from the text.
+OP=$(grep -oE 'computeoperation-[a-z0-9]+' <<< "$CREATE_OUT" | head -1)
+[ -n "$OP" ] || { echo "No operation id in the create output:"; echo "$CREATE_OUT"; exit 1; }
 
 echo "  operation $OP - waiting (placement can take ~6 min; NotEnoughResources shows up here)"
 nebius compute instance operation wait "$OP" >/dev/null || true
