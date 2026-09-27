@@ -347,7 +347,9 @@ def anchor_dock_to_world(stage, dock_root: str, pos: Vec3 = (0.0, 0.0, 0.0), yaw
     articulation and ground contact pushed it up by its buried depth (box run 27 Sep: dock_base at
     z = +0.0596, pad edge a 6 cm kerb). Here body0 is cleared and the world frame of the joint set to the
     dock's pose - one world joint, so Viser's scene build is happy too (unlike fix_root_link, which
-    adds a second one). Returns the joint path.
+    adds a second one). Then Isaac Lab's own physics_manager.fix_articulation_root() - what
+    fix_root_link runs - finds that joint, enables it and moves the ArticulationRootAPI off the root
+    body (PhysX parses a root API on the root body as a floating base). Returns the joint path.
     """
     from pxr import Gf, Usd, UsdPhysics
 
@@ -366,6 +368,11 @@ def anchor_dock_to_world(stage, dock_root: str, pos: Vec3 = (0.0, 0.0, 0.0), yaw
         joint.CreateLocalRot0Attr().Set(Gf.Quatf(math.cos(yaw / 2), 0.0, 0.0, math.sin(yaw / 2)))
         joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
         joint.CreateLocalRot1Attr().Set(Gf.Quatf(1.0, 0.0, 0.0, 0.0))
+        from isaaclab.sim import SimulationContext
+
+        root = stage.GetPrimAtPath(body1[0])
+        new_root = SimulationContext.instance().physics_manager.fix_articulation_root(root, stage)
+        print(f"[dock] articulation root {root.GetPath()} -> {new_root.GetPath() if new_root else None}")
         print(f"[dock] {prim.GetPath()} anchored to the world at {tuple(round(float(v), 3) for v in pos)}, "
               f"yaw {math.degrees(yaw):.0f} deg")
         return str(prim.GetPath())
