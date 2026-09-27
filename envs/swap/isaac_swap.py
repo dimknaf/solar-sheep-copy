@@ -83,7 +83,7 @@ from isaaclab.sim import SimulationContext  # noqa: E402
 
 from envs.swap.dock_mjcf import DOCK  # noqa: E402
 from envs.swap.isaac_hardware import (  # noqa: E402
-    IsaacDockHardware, LatchBank, author_spare_pack, dock_stations, find_named_prim, quat_yaw)
+    IsaacDockHardware, LatchBank, anchor_dock_to_world, author_spare_pack, dock_stations, find_named_prim, quat_yaw)
 from envs.swap.scripts.status import Status  # noqa: E402
 from envs.swap.scripts.swap_battery import (  # noqa: E402
     HEIGHT_GAP_TOL_M, XY_TOL_M, YAW_TOL_RAD, Phase, SwapBatteryController, SwapRequest, swap_battery)
@@ -143,6 +143,7 @@ class SwapScene:
             actuators={"lift": ImplicitActuatorCfg(joint_names_expr=["dock_lift"], stiffness=DOCK.lift_kp,
                                                    damping=DOCK.lift_kv, joint_effort_limit=500.0)},
         ))
+        anchor_dock_to_world(sim_utils.get_current_stage(), "/World/Dock", (0.0, 0.0, 0.0), 0.0)
         # Rover: rover_cfg.py's actuators (G2 parity), the swap USD. The spawn translation moves the
         # chassis AND its separate pack; both are placed exactly again after reset (_place_rover).
         self.rover = Articulation(ArticulationCfg(

@@ -244,7 +244,7 @@ except Exception:  # noqa: BLE001  (values of dock_mjcf.DockLayout, 27 Sep)
 PHYSICAL = args_cli.dock_mode == "physical"
 if PHYSICAL:
     try:
-        from envs.swap.isaac_hardware import IsaacDockHardware, LatchBank, dock_stations  # noqa: E402
+        from envs.swap.isaac_hardware import IsaacDockHardware, LatchBank, anchor_dock_to_world, dock_stations  # noqa: E402
     except Exception as _e:  # noqa: BLE001
         raise SystemExit(f"[factory] cannot import envs/swap/isaac_hardware.py (Contract 2): "
                          f"{type(_e).__name__}: {_e}\n  (run with --dock-mode logical to test the rest)")
@@ -421,6 +421,7 @@ def factory_prestartup(env, env_ids) -> None:
             init_state=ArticulationCfg.InitialStateCfg(pos=(DX, DY, 0.0), rot=yaw_quat(DYAW), joint_pos={".*": 0.0}),
             actuators={"lift": ImplicitActuatorCfg(joint_names_expr=[".*"], stiffness=LIFT_STIFFNESS,
                                                    damping=LIFT_DAMPING)}))
+        anchor_dock_to_world(stage, DOCK_PRIM, (DX, DY, 0.0), DYAW)   # a truly fixed base (see its docstring)
         from pxr import Usd, UsdPhysics             # the carriage is a jack: it must never collide
         for prim in Usd.PrimRange(stage.GetPrimAtPath(DOCK_PRIM)):
             if prim.GetName() == "dock_carriage":

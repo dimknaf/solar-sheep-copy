@@ -338,6 +338,40 @@ def spare_pack_cfg(prim_path: str, pos: Vec3, rot: Quat = IDENTITY, layout: Dock
     )
 
 
+def anchor_dock_to_world(stage, dock_root: str, pos: Vec3 = (0.0, 0.0, 0.0), yaw: float = 0.0) -> str:
+    """Make the imported dock a truly fixed base. Call after the dock is spawned, before sim.reset().
+
+    The importer (fix_base=True) writes a FixedJoint from the asset's root Xform (not a rigid body) to
+    dock_base. Isaac Lab and PhysX only treat a fixed joint with ONE body as a world anchor
+    (sim/utils/queries.py find_global_fixed_joint_prim), so the dock parsed as a free, gravity-less
+    articulation and ground contact pushed it up by its buried depth (box run 27 Sep: dock_base at
+    z = +0.0596, pad edge a 6 cm kerb). Here body0 is cleared and the world frame of the joint set to the
+    dock's pose - one world joint, so Viser's scene build is happy too (unlike fix_root_link, which
+    adds a second one). Returns the joint path.
+    """
+    from pxr import Gf, Usd, UsdPhysics
+
+    for prim in Usd.PrimRange(stage.GetPrimAtPath(dock_root)):
+        if not prim.IsA(UsdPhysics.FixedJoint):
+            continue
+        joint = UsdPhysics.FixedJoint(prim)
+        body0 = joint.GetBody0Rel().GetTargets()
+        body1 = joint.GetBody1Rel().GetTargets()
+        if len(body1) != 1 or not stage.GetPrimAtPath(body1[0]).HasAPI(UsdPhysics.ArticulationRootAPI):
+            continue
+        if body0 and stage.GetPrimAtPath(body0[0]).HasAPI(UsdPhysics.RigidBodyAPI):
+            continue
+        joint.GetBody0Rel().ClearTargets(True)
+        joint.CreateLocalPos0Attr().Set(Gf.Vec3f(*[float(v) for v in pos]))
+        joint.CreateLocalRot0Attr().Set(Gf.Quatf(math.cos(yaw / 2), 0.0, 0.0, math.sin(yaw / 2)))
+        joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
+        joint.CreateLocalRot1Attr().Set(Gf.Quatf(1.0, 0.0, 0.0, 0.0))
+        print(f"[dock] {prim.GetPath()} anchored to the world at {tuple(round(float(v), 3) for v in pos)}, "
+              f"yaw {math.degrees(yaw):.0f} deg")
+        return str(prim.GetPath())
+    raise RuntimeError(f"no importer world joint found under {dock_root} (was the dock converted with fix_base?)")
+
+
 def author_spare_pack(prim_path: str, pos: Vec3, rot: Quat = IDENTITY, layout: DockLayout = DOCK, **kw):
     """Spawn one spare pack on the stage (before sim.reset) and return its RigidObject."""
     from isaaclab.assets import RigidObject
@@ -717,6 +751,6 @@ class IsaacDockHardware:
             root_velocity=torch.tensor([[*lin, *ang]], dtype=torch.float32, device=dev), env_ids=[pk.env])
 
 
-__all__ = ["LatchBank", "IsaacDockHardware", "author_spare_pack", "spare_pack_cfg", "dock_stations",
+__all__ = ["LatchBank", "IsaacDockHardware", "anchor_dock_to_world", "author_spare_pack", "spare_pack_cfg", "dock_stations",
            "find_named_prim", "quat_yaw", "yaw_quat", "LEGACY_FULL_STROKE", "VEHICLE", "CARRIAGE",
            "RACK_FULL", "RACK_EMPTY", "WELD", "PINNED", "FREE"]
