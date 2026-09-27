@@ -5,6 +5,27 @@ Details of every skill mentioned: [docs/skills.md](skills.md).
 
 ---
 
+## D15 · 27 Sep 2026 — The unified factory run: trained herd + physical swaps + Nemotron dispatch
+- **What runs, in one Omniverse scene** (`envs/isaac_rover/factory.py`): 5 tilted-panel rovers
+  driven by the trained rough-terrain policy (TorchScript), targets chosen by the fleet brain
+  (`orchestrator/`, Nemotron-3.5-Lightning on Token Factory, strict JSON schema, rule fallback),
+  rovers turning to face the sun while harvesting (SoC from real panel exposure), a dock queue,
+  berthing, and the physical battery swap of D14 for every docking rover. Injected fault: a rock
+  dropped on a rover's cell; the brain re-plans.
+- **Result, 180 s run, Nemotron dispatching** (`/data/runs/factory/nemo180b`): all four checks pass
+  (full cycle harvest → dock → physical swap → back to a cell, twice; physical swap, new pack
+  0.0 mm in its bay after leaving; no rover left the pasture; no tip-over). 902 Wh delivered,
+  29 LLM calls (359 plans from Nemotron, 1 from the rules), ~$0.004 of Token Factory.
+- **DeepSeek-V4.1-Flash, same setup (owner's test model):** both swaps, but 18 faults and one
+  tip-over. One run each - suggestive, not a benchmark. The submission uses Nemotron (an NVIDIA
+  open model is required by the rules).
+- **Honest limits, shown on the clip:** rovers pass through each other (rover-rover contact off:
+  the trained policy cannot sense other rovers, and with contact on the herd jammed at the pasture
+  edge); the final 1.5 m onto the berth is a P controller; the deck shuttles are the plant's
+  scripted conveyor; the sun / SoC clock runs 120x time-lapse while physics runs at 1x; the scene
+  renders at ~0.1x real time (1080p RTX every 2 control steps).
+- **Next:** rover-rover perception or lanes; policy-driven berthing; Tavily weather into the prompt.
+
 ## D14 · 27 Sep 2026 — Battery swap in Omniverse: the latch is a real joint, toggled while PhysX runs
 - **Mechanism:** the importer turns MuJoCo's `pack_latch` weld into a USD FixedJoint excluded from
   the articulation. Setting `physics:jointEnabled` on it while the simulation plays releases or
