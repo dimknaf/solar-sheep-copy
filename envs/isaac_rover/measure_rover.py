@@ -72,7 +72,9 @@ SPEC = {"speed": 0.279, "yaw": 0.571, "climbs_deg": 14, "stalls_deg": 16, "holds
 # (name, kind, angle_deg, lane y). Flat lanes close together so one camera frames both.
 LANES = [("straight", "flat", 0, 0.0), ("spin", "flat", 0, 3.0)]
 LANES += [(f"climb_{a}", "climb", a, 9.0 + 6.0 * i) for i, a in enumerate((10, 12, 14, 16))]
-LANES += [(f"hold_{a}", "hold", a, 33.0 + 6.0 * i) for i, a in enumerate((30, 33, 36))]
+# Side-slope ramps are 14 m wide so a sliding rover stays on the slope for the whole run
+# (on 26 Sep a 4 m ramp let the 36-deg rover slide off the edge and tip - a test artefact).
+LANES += [(f"hold_{a}", "hold", a, 36.0 + 16.0 * i) for i, a in enumerate((30, 33, 36))]
 
 
 def physics_cfg():
@@ -110,11 +112,11 @@ def lane_pose(kind: str, angle_deg: float, y0: float):
         q = quat_xyzw("x", a)
         n = (0.0, -math.sin(a), math.cos(a))
         d = (0.0, math.cos(a), math.sin(a))
-    thick, centre_up = 0.2, 1.5                        # ramp box thickness; ramp centre height
+    thick, centre_up = 0.2, (1.5 if kind == "climb" else 4.5)   # hold ramps sit higher: 7 m of slope below
     centre = (0.0, y0, centre_up)
     top = tuple(centre[i] + thick / 2 * n[i] for i in range(3))
     start = tuple(top[i] - 1.5 * d[i] * (kind == "climb") + (CHASSIS_Z + 0.005) * n[i] for i in range(3))
-    return start, q, dict(size=(8.0, 4.0, thick), pos=centre, quat=q)
+    return start, q, dict(size=(8.0, 4.0, thick) if kind == "climb" else (8.0, 14.0, thick), pos=centre, quat=q)
 
 
 def main():
