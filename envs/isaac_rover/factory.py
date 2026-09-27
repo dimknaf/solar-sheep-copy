@@ -162,6 +162,10 @@ parser.add_argument("--dock-usd", default=DEFAULT_DOCK_USD)
 parser.add_argument("--dock-mode", choices=["physical", "logical"], default="physical",
                     help="logical = no IsaacDockHardware: the phase machine runs on NullHardware and the SoC "
                          "is reset on SUCCESS (labelled on screen; the physical-swap assertion then fails)")
+parser.add_argument("--rovers-collide", action="store_true",
+                    help="rover-rover contact on. Off by default: the trained policy cannot sense other rovers "
+                         "(its rangefinders only see the ground), so on 27 Sep the herd jammed at the pasture "
+                         "edge. Dock, packs and the fault rock always collide with every rover.")
 parser.add_argument("--no-viser", action="store_true",
                     help="no live Viser view (only one run can own the box's 127.0.0.1:8080 at a time)")
 parser.add_argument("--llm", action="store_true", help="let the LLM dispatch (key from the environment)")
@@ -486,7 +490,7 @@ def build_cfg() -> FactoryEnvCfg:
         cfg.sim.device = args_cli.device
     cfg.scene.num_envs = N
     cfg.scene.env_spacing = ENV_SPACING
-    cfg.scene.filter_collisions = False                    # rovers really collide with each other
+    cfg.scene.filter_collisions = not args_cli.rovers_collide   # env-to-env (rover-rover) contact; globals collide
     cfg.scene.replicate_physics = False                    # per-env parsing: required for prestartup events
     cfg.scene.sky_light.spawn.intensity = SKY_INTENSITY    # (event_manager.py:378) and the cross-env latches
     cfg.episode_length_s = 1.0e5                           # no 25 s timeout teleports
@@ -1303,7 +1307,8 @@ class Factory:
                      "queue": [RIDS[i] for i in self.queue], "empty_packs": self.empty_count() if PHYSICAL else "-",
                      "swaps": self.counters["swaps_ok"],
                      "mode": ("physical latch swap: USD FixedJoints toggled at runtime" if PHYSICAL
-                              else "LOGICAL swap (dock hardware disabled)")},
+                              else "LOGICAL swap (dock hardware disabled)")
+                             + ("" if args_cli.rovers_collide else " · rovers pass through each other")},
             "brain": {"label": brain_label(plan.source), "calls": st.get("calls", 0),
                       "cost": st.get("cost_usd_est", 0.0), "in_flight": st.get("in_flight", False),
                       "cmd_json": self.last_cmd["json"], "cmd_reason": self.last_cmd["reason"],
