@@ -146,8 +146,9 @@ TILT = math.radians(20.0)
 PANEL_N_B = (math.sin(TILT), 0.0, math.cos(TILT))
 # ---- video ------------------------------------------------------------------------------------------
 WIDTH, HEIGHT = 1920, 1080
-CAM_EYE = (7.6, -14.0, 9.8)        # wide 3/4 view from the south-east: pasture, queue, dock, park row
-CAM_LOOKAT = (-1.6, 1.2, 0.0)
+CAM_EYE = (3.6, -9.2, 6.6)         # 3/4 view from the south-east, ~13 m out: pasture, queue, dock, park row
+CAM_LOOKAT = (-1.8, 1.2, 0.0)
+PASTURE_RGB = (0.30, 0.46, 0.20)   # the ground plane's tint (Isaac's grid texture, coloured as a pasture)
 CAM_HFOV_DEG = 60.0                # Kit's default perspective camera (18.15 mm / 20.955 mm aperture)
 TAG_Z = 0.85                       # name tags drawn this high above the rover origin
 FAULT_BANNER_S = 12.0
@@ -161,6 +162,8 @@ parser.add_argument("--dock-usd", default=DEFAULT_DOCK_USD)
 parser.add_argument("--dock-mode", choices=["physical", "logical"], default="physical",
                     help="logical = no IsaacDockHardware: the phase machine runs on NullHardware and the SoC "
                          "is reset on SUCCESS (labelled on screen; the physical-swap assertion then fails)")
+parser.add_argument("--no-viser", action="store_true",
+                    help="no live Viser view (only one run can own the box's 127.0.0.1:8080 at a time)")
 parser.add_argument("--llm", action="store_true", help="let the LLM dispatch (key from the environment)")
 parser.add_argument("--model", default=None, help="Token Factory model (default: SOLAR_TF_MODEL)")
 parser.add_argument("--max-llm-calls", type=int, default=300)
@@ -198,7 +201,7 @@ ROVER_USD = os.environ["ROVER_USD"]
 for _label, _path in (("rover USD (--usd)", ROVER_USD), ("policy (--policy)", args_cli.policy)):
     if not os.path.isfile(_path):
         raise SystemExit(f"[factory] {_label} not found: {_path}")
-args_cli.visualizer = ["kit", "viser"]         # counts as an explicit --viz request (app_launcher.py:973)
+args_cli.visualizer = ["kit"] if args_cli.no_viser else ["kit", "viser"]   # explicit --viz (app_launcher.py:973)
 args_cli.video = True                          # rendering-capable Kit experience, as measure_rover.py
 args_cli.enable_cameras = True
 app_launcher = AppLauncher(args_cli)
@@ -492,8 +495,10 @@ def build_cfg() -> FactoryEnvCfg:
     cfg.events.reset_base.params["pose_range"] = {"z": (0.005, 0.005)}   # a tip-over reset lands at the park spot
     cfg.events.factory_setup = EventTerm(func=factory_prestartup, mode="prestartup")
     cfg.sim.render_interval = cfg.decimation * capture_every()             # render only on captured steps
-    cfg.sim.visualizer_cfgs = [
-        ViserVisualizerCfg(bind_address="127.0.0.1", port=8080, open_browser=False, share=False, max_visible_envs=64),
+    cfg.scene.terrain.visual_material = sim_utils.PreviewSurfaceCfg(diffuse_color=PASTURE_RGB)
+    cfg.sim.visualizer_cfgs = [] if args_cli.no_viser else [
+        ViserVisualizerCfg(bind_address="127.0.0.1", port=8080, open_browser=False, share=False, max_visible_envs=64)]
+    cfg.sim.visualizer_cfgs += [
         KitVisualizerCfg(headless=True, origin_type="world", eye=tuple(args_cli.cam_eye),
                          lookat=tuple(args_cli.cam_lookat), window_width=WIDTH, window_height=HEIGHT),
     ]
