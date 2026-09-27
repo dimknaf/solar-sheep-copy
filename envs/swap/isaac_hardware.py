@@ -363,7 +363,11 @@ def anchor_dock_to_world(stage, dock_root: str, pos: Vec3 = (0.0, 0.0, 0.0), yaw
             continue
         if body0 and stage.GetPrimAtPath(body0[0]).HasAPI(UsdPhysics.RigidBodyAPI):
             continue
-        joint.GetBody0Rel().ClearTargets(True)
+        # SetTargets([]) authors an explicit empty list over the payload's `append` opinion;
+        # ClearTargets() only drops the local spec and the composed body0 stays (box run 27 Sep).
+        joint.GetBody0Rel().SetTargets([])
+        if joint.GetBody0Rel().GetTargets():
+            raise RuntimeError(f"could not clear body0 of {prim.GetPath()}")
         joint.CreateLocalPos0Attr().Set(Gf.Vec3f(*[float(v) for v in pos]))
         joint.CreateLocalRot0Attr().Set(Gf.Quatf(math.cos(yaw / 2), 0.0, 0.0, math.sin(yaw / 2)))
         joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
