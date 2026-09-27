@@ -56,6 +56,10 @@ parser.add_argument("--realtime", action="store_true", help="pace to wall-clock 
 parser.add_argument("--author-disabled", action="store_true",
                     help="author the spare latch disabled before play (Contract 2 as written) instead of the "
                          "default: authored enabled, opened after sim.reset() before the first step")
+parser.add_argument("--trace", action="store_true",
+                    help="print rover x / vx / pack height / wheel commands every 0.25 s (diagnosis)")
+parser.add_argument("--no-collide", default="",
+                    help="comma-separated dock collider names to switch off before play (diagnosis)")
 AppLauncher.add_app_launcher_args(parser)     # --device: Isaac Lab's default (cuda:0); cpu is optional
 args_cli = parser.parse_args()
 args_cli.visualizer = ["kit", "viser"]     # as envs/isaac_rover/measure_rover.py: RTX clip + Viser live view
@@ -151,6 +155,13 @@ class SwapScene:
 
         stage = sim_utils.get_current_stage()
         self._carriage_colliders_off(stage)
+        if args_cli.no_collide:
+            from pxr import Usd, UsdPhysics
+            names = {n.strip() for n in args_cli.no_collide.split(",") if n.strip()}
+            for prim in Usd.PrimRange(stage.GetPrimAtPath("/World/Dock")):
+                if prim.GetName() in names and prim.HasAPI(UsdPhysics.CollisionAPI):
+                    UsdPhysics.CollisionAPI(prim).CreateCollisionEnabledAttr().Set(False)
+                    print(f"[swap] DIAG collider off: {prim.GetPath()}")
         chassis = find_named_prim(stage, "/World/Rover", "chassis", "body")
         pack = find_named_prim(stage, "/World/Rover", "pack", "body")
         latch = find_named_prim(stage, "/World/Rover", "pack_latch", "joint")
@@ -322,6 +333,14 @@ class SwapScene:
 
     def _measure(self) -> None:
         m = self.m
+        if args_cli.trace and int(round(self.t / self.dt)) % max(1, int(round(0.25 / self.dt))) == 0:
+            (x, y, z), _, yaw = self._pose2d()
+            vx = float(self.rover.data.root_link_lin_vel_w.torch[0, 0])
+            pz = float(self.pack.data.root_pos_w.torch[0, 2])
+            px = float(self.pack.data.root_pos_w.torch[0, 0])
+            wv = [round(float(v), 2) for v in self.rover.data.joint_vel.torch[0, self.wheel_ids]]
+            print(f"[trace {self.t:6.2f}] {self.stage_name:8s} x={x:+.3f} y={y:+.3f} z={z:.3f} yaw={yaw:+.3f} "
+                  f"vx={vx:+.3f} pack=({px:+.3f}, z {pz:.4f}) cmd={[round(c, 2) for c in self.cmd]} wheel_vel={wv}")
         m["max_lift_top"] = max(m["max_lift_top"], self.hw.carriage_top)
         m["max_lift_cmd"] = max(m["max_lift_cmd"], self.hw.lift_command)
         if self.bank.enabled(0, 0):
