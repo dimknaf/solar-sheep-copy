@@ -36,6 +36,9 @@ envs/swap/
   pack.usda               single battery pack (rigid), at origin
   dock.usda               pad + prismatic underbody lift + named frames
   stage.usda              composition root (dock ⊃ pack references for authoring)
+  dock_mjcf.py            MuJoCo dock (+ --write-import: robot/import/dock.xml for the importer)
+  isaac_hardware.py       DockHardware for Isaac Lab / PhysX (LatchBank, IsaacDockHardware)
+  isaac_swap.py           one physical swap in Omniverse, assertions + clip (GPU box)
   scripts/
     status.py             RUNNING | SUCCESS | FAILURE
     frames.py             frame prim path constants
@@ -80,8 +83,9 @@ Rover-side frame (Dimitris owns): **`/Sheep/battery_mount`** (name TBD in `robot
 Aligned enough to start lift if all hold:
 
 - XY error ≤ **0.035 m** (was 0.08 m, which is geometrically impossible at any yaw for a
-  0.450 m pack between tyre faces at ±0.370 m). The code constant `XY_TOL_M` in
-  `scripts/swap_battery.py` is still 0.08 and changes with the dock rebuild (gate G6).
+  0.450 m pack between tyre faces at ±0.370 m). `XY_TOL_M` in `scripts/swap_battery.py`
+  is 0.035 since 27 Sep (the Isaac port); its `Pose2D.z_mount` default is now the
+  measured 0.061 m (pad top 0.001 + pack underside 0.060), not 0.16.
 - Yaw error ≤ **9°** (0.157 rad) — matches published station misalignment class
 - Pack mount height vs carriage top ≤ **0.03 m** gap before lift
 
@@ -120,6 +124,32 @@ Demo budget ~**12 s** wall-clock at 1× (JS plant uses `swapSec = 120` for econo
 | — | `FAILURE` | — | Terminal — see below |
 
 Total scripted motion after berth ≈ **10 s**. Approach timeout default **30 s**.
+
+---
+
+## Isaac port (Omniverse, Isaac Sim 6.1 PhysX via Isaac Lab 3.0 EA — 27 Sep 2026)
+
+The same swap, physically, in Omniverse: `envs/swap/isaac_swap.py` (one rover, run on the GPU box
+with `bash scripts/gpu/isaac.sh envs/swap/isaac_swap.py`), and `envs/swap/isaac_hardware.py`, which
+the multi-rover factory reuses. `swap_battery.py` is driven unchanged through the six-method Protocol.
+
+| MuJoCo (`dock_mjcf.py`, `scripts/mujoco_hardware.py`) | Omniverse |
+|---|---|
+| dock grafted onto `rover.xml` in memory | `dock_mjcf.py --write-import` → `robot/import/dock.xml` → official importer (`robot/usd/convert_rover.py --variants dock`, `fix_base=True`) → fixed-base articulation: root `dock_base` (120 kg, all static geoms + frame sites), child `dock_carriage` on prismatic `dock_lift` [0, 0.060], carriage visual-only |
+| `dock_lift_act` position servo, `gravcomp=1` | Isaac Lab `ImplicitActuatorCfg` on `dock_lift` (stiffness 20000 N/m, damping 400) + `disable_gravity` on the dock bodies |
+| `pack` free body + `pack_latch` weld (`eq_active`) | importer's `pack` rigid body + `pack_latch` `UsdPhysics.FixedJoint` (excludeFromArticulation), toggled with `physics:jointEnabled` at runtime |
+| `pack_spare` + `spare_latch` weld + contact exclude | a 4 kg `CuboidCfg` rigid body at `empty_ready`, plus a FixedJoint authored disabled before `sim.reset()` with `pack_latch`'s local frames (`LatchBank`), plus `UsdPhysics.FilteredPairsAPI` chassis↔pack |
+| carriage top = `dock_pack_attach` site | dock root z + `dock_lift` joint position |
+| `battery_mount` site | chassis pose ⊗ the latch's local frames, minus half the pack height |
+| PINNED packs: qpos written, qvel zeroed | `RigidObject.write_root_pose/velocity_to_sim_index` every step (the conveyor) |
+| latch closes after writing the pack to the bay | same, and the pack is given the chassis velocity at the bay first |
+
+Mechanism rules carried over verbatim: Protocol calls ARM a transfer, `sync(dt)` resolves it when the
+carriage is within 4 mm; lift rate-limited at 0.055 m/s; the legacy `0.12` means "full stroke" = 0.060;
+the pack is never dragged below the deck. For N rovers / M packs, `LatchBank` authors one joint per
+(chassis, pack) pair (adopting each rover's imported `pack_latch`) and `IsaacDockHardware.set_active(i)`
+selects the rover on the berth; `convey()` is the plant conveyor between stations. The runtime toggle
+was proven on `cuda:0` by the lead's latch spike (27 Sep); the CPU pipeline died at sim start there.
 
 ---
 

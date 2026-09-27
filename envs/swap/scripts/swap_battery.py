@@ -36,9 +36,14 @@ PHASE_DURATION = {
 }
 
 APPROACH_TIMEOUT_S = 30.0
-XY_TOL_M = 0.08
+XY_TOL_M = 0.035  # LOCKED (SPEC.md berth tolerance; 0.08 cannot fit the pack between the tyres)
 YAW_TOL_RAD = 0.157  # ~9°
 HEIGHT_GAP_TOL_M = 0.03
+
+
+# World z of the rover's pack underside (`battery_mount`) when it stands on the dock
+# pad: pad top 0.001 + LOCKED pack underside 0.060 (robot/SPEC.md). Was 0.16.
+Z_MOUNT_BERTHED_M = 0.061
 
 
 @dataclass
@@ -46,7 +51,7 @@ class Pose2D:
     x: float
     y: float
     yaw: float
-    z_mount: float = 0.16
+    z_mount: float = Z_MOUNT_BERTHED_M
 
 
 @dataclass
@@ -54,7 +59,7 @@ class SwapRequest:
     vehicle_id: str
     dock_id: str = "dock0"
     vehicle_pose: Optional[Pose2D] = None
-    berth_pose: Pose2D = field(default_factory=lambda: Pose2D(0.0, 0.0, 0.0, 0.16))
+    berth_pose: Pose2D = field(default_factory=lambda: Pose2D(0.0, 0.0, 0.0, Z_MOUNT_BERTHED_M))
     empty_pack_count: int = 1
     force_aligned: bool = False
 

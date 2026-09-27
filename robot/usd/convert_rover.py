@@ -3,14 +3,18 @@
 Runs INSIDE NVIDIA's Isaac Lab container on the GPU box (it needs Isaac Sim), from the box:
 
     bash scripts/gpu/isaac.sh robot/usd/convert_rover.py   # -> /data/runs/usd/<name>/<name>/<name>.usda
+    bash scripts/gpu/isaac.sh robot/usd/convert_rover.py --out /data/runs/usd/tilt20 --variants dock
 
 Inputs are the two rover-only MJCFs from robot/make_import_variants.py:
     robot/import/rover_train.xml  -> <out>/rover_train/rover_train.usda  (one 29.4 kg articulation)
     robot/import/rover_swap.xml   -> <out>/rover_swap/rover_swap.usda    (pack + latch FixedJoint)
+and, on request, the swap dock from envs/swap/dock_mjcf.py --write-import:
+    robot/import/dock.xml         -> <out>/dock/dock.usda                (fixed-base, one prismatic dock_lift)
 
 Same path as Isaac Lab's scripts/tools/convert_mjcf.py (MjcfConverter -> Isaac Sim 6.1
 isaacsim.asset.importer.mjcf), plus the two settings that script does not expose:
-robot_type="Wheeled" and fix_base=False. The "Physics" variant is set to PhysX; the
+robot_type="Wheeled" and fix_base=False (the dock: robot_type="Default", fix_base=True, so the
+importer adds the world FixedJoint to dock_base). The "Physics" variant is set to PhysX; the
 MuJoCo variant stays in the file for the Newton MuJoCo-Warp check (docs/decisions.md D5).
 
 After converting, it prints a physics report (bodies, mass, joints, drives, colliders,
@@ -38,6 +42,10 @@ args_cli.physics = "isaacsim_physx" if args_cli.require_kit else "newton_mjwarp"
 from isaaclab.physics import PhysicsCfg  # noqa: E402
 from isaaclab.sim.converters import MjcfConverter, MjcfConverterCfg  # noqa: E402
 
+# Importer settings per variant; anything not listed (e.g. rover_train_wb030) is a rover.
+ROVER = {"robot_type": "Wheeled", "fix_base": False}
+IMPORT_SETTINGS = {"dock": {"robot_type": "Default", "fix_base": True}}
+
 
 def report(usd_path: str) -> None:
     """Print what the importer produced, in the terms robot/SPEC.md uses."""
@@ -49,20 +57,28 @@ def report(usd_path: str) -> None:
 
     # The importer authors mass on each collider prim (payloads/Physics/physics.usda), not on the
     # body: a body's mass is the sum over the colliders beneath it (nested bodies excluded).
+    # A body-level MassAPI mass (e.g. from an explicit MJCF <inertial>, as the dock uses) overrides
+    # its colliders in PhysX; both are printed. "colliders n/e" = collider prims / enabled ones, so
+    # a visual-only body (the dock carriage must be one) reads 0/0.
     total = 0.0
     bodies = [p for p in stage.Traverse() if p.HasAPI(UsdPhysics.RigidBodyAPI)]
     for b in bodies:
-        m = 0.0
+        m, n_col, n_on = 0.0, 0, 0
         it = iter(Usd.PrimRange(b))
         for c in it:
             if c != b and c.HasAPI(UsdPhysics.RigidBodyAPI):
                 it.PruneChildren()          # a nested body (e.g. a wheel) owns its own colliders
                 continue
-            if c.HasAPI(UsdPhysics.MassAPI) and c.HasAPI(UsdPhysics.CollisionAPI):
-                m += UsdPhysics.MassAPI(c).GetMassAttr().Get() or 0.0
-        total += m
-        print(f"  body   {b.GetName():18s} mass={m:.3f} kg (sum of its colliders)")
-    print(f"  total mass: {total:.3f} kg   (SPEC: 29.4)")
+            if c.HasAPI(UsdPhysics.CollisionAPI):
+                n_col += 1
+                n_on += bool(UsdPhysics.CollisionAPI(c).GetCollisionEnabledAttr().Get() in (None, True))
+                if c.HasAPI(UsdPhysics.MassAPI):
+                    m += UsdPhysics.MassAPI(c).GetMassAttr().Get() or 0.0
+        own = UsdPhysics.MassAPI(b).GetMassAttr().Get() if b.HasAPI(UsdPhysics.MassAPI) else None
+        total += own if own else m
+        print(f"  body   {b.GetName():18s} mass={m:.3f} kg (sum of its colliders)  body MassAPI mass={own}"
+              f"  colliders {n_col}/{n_on} enabled  path={b.GetPath()}")
+    print(f"  total mass: {total:.3f} kg   (SPEC rover: 29.4)")
 
     for p in stage.Traverse():
         if not p.IsA(UsdPhysics.Joint):
@@ -75,14 +91,20 @@ def report(usd_path: str) -> None:
             line += f" excludeFromArticulation={p.GetAttribute('physics:excludeFromArticulation').Get()}"
         if p.HasAttribute("physics:jointEnabled"):
             line += f" jointEnabled={p.GetAttribute('physics:jointEnabled').Get()}"
-        drive = UsdPhysics.DriveAPI.Get(p, "angular")
-        if drive:
-            line += (f" drive(stiffness={drive.GetStiffnessAttr().Get()}, damping={drive.GetDampingAttr().Get()},"
-                     f" maxForce={drive.GetMaxForceAttr().Get()})")
+        if p.IsA(UsdPhysics.PrismaticJoint) or p.IsA(UsdPhysics.RevoluteJoint):
+            lo, hi = p.GetAttribute("physics:lowerLimit").Get(), p.GetAttribute("physics:upperLimit").Get()
+            if lo is not None or hi is not None:
+                line += f" limits=[{lo}, {hi}]"
+        for dof in ("angular", "linear"):
+            drive = UsdPhysics.DriveAPI.Get(p, dof)
+            if drive:
+                line += (f" {dof}Drive(stiffness={drive.GetStiffnessAttr().Get()},"
+                         f" damping={drive.GetDampingAttr().Get()}, maxForce={drive.GetMaxForceAttr().Get()})")
         for name in ("physxJoint:jointFriction", "physxJoint:armature"):
             if p.HasAttribute(name):
                 line += f" {name.split(':')[1]}={p.GetAttribute(name).Get()}"
-        print(line + f"  body0={j.GetBody0Rel().GetTargets()} body1={j.GetBody1Rel().GetTargets()}")
+        print(line + f"  body0={j.GetBody0Rel().GetTargets()} body1={j.GetBody1Rel().GetTargets()}"
+              f"  path={p.GetPath()}")
 
     for p in stage.Traverse():
         if p.HasAPI(UsdPhysics.CollisionAPI):
@@ -104,6 +126,13 @@ def report(usd_path: str) -> None:
              if p.HasAPI(UsdPhysics.CollisionAPI)
              and UsdShade.MaterialBindingAPI(p).GetDirectBinding("physics").GetMaterial()]
     print(f"  colliders with a physics material bound: {len(bound)}")
+    pairs = [(str(p.GetPath()), [str(t) for t in UsdPhysics.FilteredPairsAPI(p).GetFilteredPairsRel().GetTargets()])
+             for p in stage.Traverse() if p.HasAPI(UsdPhysics.FilteredPairsAPI)]
+    print(f"  filtered pairs: {pairs}")
+    sites = [str(p.GetPath()) for p in stage.Traverse()
+             if p.GetName().startswith(("dock_approach", "dock_berth", "dock_empty_ready", "dock_full_stow",
+                                        "dock_pack_attach", "battery_mount"))]
+    print(f"  frame/site prims: {sites}")
 
 
 def main() -> None:
@@ -115,9 +144,8 @@ def main() -> None:
                 usd_dir=os.path.join(args_cli.out, name),
                 usd_file_name=f"{name}.usda",
                 force_usd_conversion=True,
-                robot_type="Wheeled",
-                fix_base=False,
                 physics_variant="physx",
+                **IMPORT_SETTINGS.get(name, ROVER),
             )
             usd_path = MjcfConverter(cfg).usd_path
             print("=" * 80)
