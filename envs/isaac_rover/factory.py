@@ -415,7 +415,8 @@ def factory_prestartup(env, env_ids) -> None:
     if os.path.isfile(dock_usd):
         FACTORY["dock"] = Articulation(ArticulationCfg(
             prim_path=DOCK_PRIM,
-            spawn=sim_utils.UsdFileCfg(usd_path=dock_usd, variants={"Physics": "physx"}, fix_root_link=True,
+            # no fix_root_link: the imported dock already has its world FixedJoint (a second breaks Viser)
+            spawn=sim_utils.UsdFileCfg(usd_path=dock_usd, variants={"Physics": "physx"},
                                        rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True)),
             init_state=ArticulationCfg.InitialStateCfg(pos=(DX, DY, 0.0), rot=yaw_quat(DYAW), joint_pos={".*": 0.0}),
             actuators={"lift": ImplicitActuatorCfg(joint_names_expr=[".*"], stiffness=LIFT_STIFFNESS,

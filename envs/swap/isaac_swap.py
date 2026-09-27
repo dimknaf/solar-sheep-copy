@@ -129,8 +129,9 @@ class SwapScene:
         # MJCF gravcomp=1 (a screw jack does not droop); stiffness is N/m on a prismatic joint.
         self.dock = Articulation(ArticulationCfg(
             prim_path="/World/Dock",
+            # No fix_root_link: the dock USD (imported with fix_base=True) already carries its world
+            # FixedJoint; a second one breaks the Viser scene build ("Cannot merge joint ... FixedJoint").
             spawn=sim_utils.UsdFileCfg(usd_path=args_cli.dock_usd, variants={"Physics": "physx"},
-                                       fix_root_link=True,
                                        rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True)),
             init_state=ArticulationCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0), joint_pos={"dock_lift": 0.0}),
             actuators={"lift": ImplicitActuatorCfg(joint_names_expr=["dock_lift"], stiffness=DOCK.lift_kp,
