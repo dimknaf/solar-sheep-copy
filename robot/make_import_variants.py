@@ -22,6 +22,12 @@ dock releases at runtime (docs/decisions.md D6).
 The solar-panel design (flat as built, fixed tilt, or tilt motor) is an open
 owner decision; make it in rover.xml and re-run this script.
 
+Wheelbase study (owner, 27 Sep: "the two axles are so close" - the rover may flip):
+    python robot/make_import_variants.py --wheelbase 0.30 0.36
+also writes rover_train_wb030.xml / rover_train_wb036.xml: identical rovers with the front and
+rear wheel pairs (and their visible axle stubs) moved to x = +-L/2. Track (0.80 m), mass, CoM
+and everything else stay as in rover.xml. Only the train variant is generated for the study.
+
 Usage:
     python robot/make_import_variants.py            # write both files
     python robot/make_import_variants.py --check    # also compile them with mujoco and
@@ -103,6 +109,29 @@ def make_train(src: ET.Element) -> ET.Element:
     return root
 
 
+def with_wheelbase(root: ET.Element, wheelbase: float) -> ET.Element:
+    """Move the front/rear wheel bodies and their axle stubs to x = +-wheelbase/2."""
+    root = copy.deepcopy(root)
+    half = wheelbase / 2.0
+    moved = 0
+    for body in root.iter("body"):
+        m = re.fullmatch(r"wheel_([fr])[lr]_body", body.get("name", ""))
+        if m:
+            pos = _vec(body.get("pos"))
+            pos[0] = half if m.group(1) == "f" else -half
+            body.set("pos", " ".join(f"{v:g}" for v in pos))
+            moved += 1
+    for geom in root.iter("geom"):
+        m = re.fullmatch(r"axle_([fr])[lr]", geom.get("name", ""))
+        if m and geom.get("fromto"):
+            ft = _vec(geom.get("fromto"))
+            ft[0] = ft[3] = half if m.group(1) == "f" else -half
+            geom.set("fromto", " ".join(f"{v:g}" for v in ft))
+    if moved != 4:
+        raise SystemExit(f"expected 4 wheel bodies, moved {moved}")
+    return root
+
+
 def write(root: ET.Element, path: Path) -> None:
     root.insert(0, ET.Comment(f" {HEADER} "))
     ET.indent(root, space="  ")
@@ -170,6 +199,8 @@ def check() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--check", action="store_true", help="compile and compare with mujoco")
+    ap.add_argument("--wheelbase", type=float, nargs="*", default=[],
+                    help="also write rover_train_wbXXX.xml for these wheelbases (m)")
     args = ap.parse_args()
     # rover.xml's comments contain "--", which MuJoCo tolerates but strict XML does not;
     # the generated files carry no comments anyway.
@@ -178,6 +209,10 @@ def main() -> int:
     write(make_train(src), OUT / "rover_train.xml")
     write(make_swap(src), OUT / "rover_swap.xml")
     print(f"wrote {OUT / 'rover_train.xml'}\nwrote {OUT / 'rover_swap.xml'}")
+    for wb in args.wheelbase:
+        path = OUT / f"rover_train_wb{round(wb * 100):03d}.xml"
+        write(with_wheelbase(make_train(src), wb), path)
+        print(f"wrote {path}  (wheelbase {wb:.2f} m)")
     return check() if args.check else 0
 
 

@@ -16,6 +16,9 @@ copy of the rover in one scene, on the ground or on its own ramp:
     climb_N    full forward up an N-degree ramp           -> climbs 14 deg, stalls by 16 deg (SPEC)
     hold_N     parked (wheel targets 0) across an N-degree
                side slope                                 -> holds to 33 deg, slides by 36 (SPEC)
+    pitch_N    parked (wheel targets 0) nose-up on an
+               N-degree slope                             -> slides or flips end-over-end? (wheelbase study)
+A tip counts only while the rover is still on its slope (sliding off the end of a test ramp is not).
 
 The wheel actuators are set here, in SI units, from robot/rover.xml -- NOT from the drive
 gains the importer wrote into the USD (docs/decisions.md D6):
@@ -45,6 +48,7 @@ parser.add_argument("--seconds", type=float, default=8.0)
 parser.add_argument("--out", default="/data/runs/measure", help="results + clip directory")
 parser.add_argument("--realtime", action="store_true", help="pace to wall-clock time (for watching live)")
 parser.add_argument("--loops", type=int, default=1, help="repeat the drive (results from the first)")
+parser.add_argument("--tag", default="", help="suffix for the output files, e.g. wb030 for a wheelbase variant")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 # Launch Kit with rendering (for the RTX clip) plus the Viser web view. Their settings come from
@@ -75,6 +79,8 @@ LANES += [(f"climb_{a}", "climb", a, 9.0 + 6.0 * i) for i, a in enumerate((10, 1
 # Side-slope ramps are 14 m wide so a sliding rover stays on the slope for the whole run
 # (on 26 Sep a 4 m ramp let the 36-deg rover slide off the edge and tip - a test artefact).
 LANES += [(f"hold_{a}", "hold", a, 36.0 + 16.0 * i) for i, a in enumerate((30, 33, 36))]
+LANES += [(f"pitch_{a}", "pitch", a, 84.0 + 6.0 * i) for i, a in enumerate((32, 36))]
+ROOM = {"climb": 5.5, "hold": 6.5, "pitch": 3.5}     # metres of slope below the start point
 
 
 def physics_cfg():
@@ -104,7 +110,7 @@ def lane_pose(kind: str, angle_deg: float, y0: float):
     a = math.radians(angle_deg)
     if kind == "flat":
         return (0.0, y0, CHASSIS_Z + 0.005), (0.0, 0.0, 0.0, 1.0), None
-    if kind == "climb":        # surface rises along +x: rotate -a about y
+    if kind in ("climb", "pitch"):   # surface rises along +x: rotate -a about y
         q = quat_xyzw("y", -a)
         n = (-math.sin(a), 0.0, math.cos(a))          # surface normal
         d = (math.cos(a), 0.0, math.sin(a))           # uphill direction
@@ -112,11 +118,12 @@ def lane_pose(kind: str, angle_deg: float, y0: float):
         q = quat_xyzw("x", a)
         n = (0.0, -math.sin(a), math.cos(a))
         d = (0.0, math.cos(a), math.sin(a))
-    thick, centre_up = 0.2, (1.5 if kind == "climb" else 4.5)   # hold ramps sit higher: 7 m of slope below
+    thick, centre_up = 0.2, (4.5 if kind == "hold" else 1.5)    # hold ramps sit higher: 7 m of slope below
     centre = (0.0, y0, centre_up)
     top = tuple(centre[i] + thick / 2 * n[i] for i in range(3))
-    start = tuple(top[i] - 1.5 * d[i] * (kind == "climb") + (CHASSIS_Z + 0.005) * n[i] for i in range(3))
-    return start, q, dict(size=(8.0, 4.0, thick) if kind == "climb" else (8.0, 14.0, thick), pos=centre, quat=q)
+    back = 1.5 if kind == "climb" else 0.0             # climbers start low; parked rovers mid-slope
+    start = tuple(top[i] - back * d[i] + (CHASSIS_Z + 0.005) * n[i] for i in range(3))
+    return start, q, dict(size=(8.0, 14.0, thick) if kind == "hold" else (8.0, 4.0, thick), pos=centre, quat=q)
 
 
 def main():
@@ -216,23 +223,29 @@ def main():
     p0, ph, p1 = track[0][0], track[len(track) // 2][0], track[-1][0]
     half_t = (len(track) - 1 - len(track) // 2) * every * dt
     yaw_rate = torch.stack([t[1][:, 2] for t in track[len(track) // 2:]]).mean(0)
-    tipped = torch.stack([t[2][:, 2] for t in track]).max(0).values > -0.5   # gravity no longer "down"
+    tip_series = torch.stack([t[2][:, 2] for t in track]) > -0.5          # [samples, lanes]: gravity not "down"
 
-    res = {"physics": args_cli.physics, "hz": args_cli.hz, "mass_kg": mass_kg, "lanes": {}}
+    res = {"physics": args_cli.physics, "hz": args_cli.hz, "tag": args_cli.tag, "usd": args_cli.usd,
+           "mass_kg": mass_kg, "lanes": {}}
     for k, (name, kind, angle, _) in enumerate(LANES):
         a = math.radians(angle)
         if kind == "climb":
             d = torch.tensor([math.cos(a), 0.0, math.sin(a)], device=dev)
         elif kind == "hold":
             d = torch.tensor([0.0, -math.cos(a), -math.sin(a)], device=dev)   # downhill
+        elif kind == "pitch":
+            d = torch.tensor([-math.cos(a), 0.0, -math.sin(a)], device=dev)   # downhill (backwards)
         else:
             d = torch.tensor([1.0, 0.0, 0.0], device=dev)
+        along = torch.stack([((t[0][k] - p0[k]) * d).sum() for t in track])   # distance per sample
+        on_slope = along.abs() < ROOM.get(kind, 1e9)
+        tipped_k = bool((tip_series[:, k] & on_slope).any())
         total = float(((p1[k] - p0[k]) * d).sum())
         speed = float(((p1[k] - ph[k]) * d).sum()) / half_t
         res["lanes"][name] = {"distance_m": round(total, 3), "speed_mps": round(speed, 4),
-                              "yaw_rate": round(float(yaw_rate[k]), 4), "tipped": bool(tipped[k])}
+                              "yaw_rate": round(float(yaw_rate[k]), 4), "tipped": tipped_k}
         print(f"  {name:10s} dist={total:+.3f} m  speed={speed:+.4f} m/s  yaw={float(yaw_rate[k]):+.4f} rad/s"
-              f"  tipped={bool(tipped[k])}")
+              f"  tipped={tipped_k}")
 
     L = res["lanes"]
     checks = {
@@ -249,7 +262,8 @@ def main():
     print("G2 PARITY PASSED" if all(checks.values()) else "G2 PARITY: see FAIL lines")
 
     os.makedirs(args_cli.out, exist_ok=True)
-    stem = os.path.join(args_cli.out, f"measure_{args_cli.physics}_{args_cli.hz}hz")
+    tag = f"_{args_cli.tag}" if args_cli.tag else ""
+    stem = os.path.join(args_cli.out, f"measure_{args_cli.physics}_{args_cli.hz}hz{tag}")
     with open(stem + ".json", "w") as f:
         json.dump(res, f, indent=2)
     if frames:
