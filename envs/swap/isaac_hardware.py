@@ -449,6 +449,22 @@ class IsaacDockHardware:
             self._reset_arms()
             self._event(f"active rover -> {self.active}")
 
+    def abort(self) -> list:
+        """A swap was abandoned part-way (timeout, a reset of the rover on the berth, a failure after the
+        release): send any pack still pinned on the carriage to full_stow, disarm and lower the lift, so
+        the dock is free for the next rover. Returns the pack indices sent to full_stow."""
+        sent = []
+        for pk in (self._full, self._spare):
+            if pk is not None and pk.mode == PINNED and pk.carrier == CARRIAGE and not pk.shuttling:
+                self._start_shuttle(pk, RACK_FULL, release_on_arrival=True)
+                sent.append(pk.idx)
+        self._full = self._spare = None
+        self._reset_arms()
+        self._lift_target = 0.0
+        if sent:
+            self._event(f"swap aborted: packs {sent} -> {RACK_FULL}")
+        return sent
+
     def empty_pack_count(self) -> int:
         """Packs waiting at empty_ready (swap_battery's rack count)."""
         return sum(1 for p in self._packs if p.carrier == RACK_EMPTY and p.mode != WELD)

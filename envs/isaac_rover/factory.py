@@ -78,11 +78,11 @@ from isaaclab.app import AppLauncher  # noqa: E402
 # ---- defaults: today's converted assets and policy on the box (contracts_today.md) -------------------
 DEFAULT_ROVER_USD = "/data/runs/usd/tilt20/rover_swap/rover_swap/rover_swap.usda"
 DEFAULT_DOCK_USD = "/data/runs/usd/tilt20/dock/dock/dock.usda"
-DEFAULT_POLICY = "/data/runs/rsl_rl/solar_sheep_traverse_flat/2026-09-27_09-39-17/exported/policy.pt"
+DEFAULT_POLICY = "/data/runs/rsl_rl/solar_sheep_traverse/2026-09-27_11-19-43/exported/policy.pt"  # rough, 1498 it
 DEFAULT_SOC = "0.90,0.75,0.55,0.35,0.18"     # 0.18, not 0.15: rules.py docks a rover at soc <= 0.15 (brownout)
 
 # ---- scene -----------------------------------------------------------------------------------------
-ENV_SPACING = 2.0                  # clone grid only; rovers are moved to the layout right after reset
+ENV_SPACING = 4.0                  # clone grid only (4 m: no rover inside the dock during warm-up); moved right after reset
 PASTURE_HALF = 8.0                 # the pasture is +-8 m; leaving it fails the run
 SUN_INTENSITY = 3000.0             # DistantLight (as Isaac Lab's ant env)
 SUN_COLOR = (1.0, 0.95, 0.85)
@@ -421,6 +421,13 @@ def factory_prestartup(env, env_ids) -> None:
             init_state=ArticulationCfg.InitialStateCfg(pos=(DX, DY, 0.0), rot=yaw_quat(DYAW), joint_pos={".*": 0.0}),
             actuators={"lift": ImplicitActuatorCfg(joint_names_expr=[".*"], stiffness=LIFT_STIFFNESS,
                                                    damping=LIFT_DAMPING)}))
+        from pxr import Usd, UsdPhysics             # the carriage is a jack: it must never collide
+        for prim in Usd.PrimRange(stage.GetPrimAtPath(DOCK_PRIM)):
+            if prim.GetName() == "dock_carriage":
+                for q in Usd.PrimRange(prim):
+                    if q.HasAPI(UsdPhysics.CollisionAPI):
+                        UsdPhysics.CollisionAPI(q).CreateCollisionEnabledAttr().Set(False)
+                        print(f"[factory] WARNING importer made {q.GetPath()} a collider; disabled it")
     elif PHYSICAL:
         raise SystemExit(f"[factory] dock USD not found: {dock_usd} (--dock-usd)")
     else:
@@ -668,6 +675,10 @@ class Factory:
             self.rock.write_root_pose_to_sim_index(root_pose=torch.tensor(
                 [[ROCK_PARK[0], ROCK_PARK[1], ROCK_SIZE[2] / 2 + 0.002, 0.0, 0.0, 0.0, 1.0]], device=self.dev))
             self.rock.write_root_velocity_to_sim_index(root_velocity=zero)
+        if self.dock is not None:                          # carriage down, at rest
+            zj = torch.zeros(1, self.dock.num_joints, device=self.dev)
+            self.dock.write_joint_position_to_sim_index(position=zj)
+            self.dock.write_joint_velocity_to_sim_index(velocity=zj)
         env.sim.forward()
         self.log(f"rovers placed ({args_cli.start}); staged soc {STAGED_SOC}; "
                  f"dock at ({DX:.2f}, {DY:.2f}) yaw {math.degrees(DYAW):.0f} deg; {K} empty packs")
@@ -910,6 +921,7 @@ class Factory:
                                empty_pack_count=0 if inject else self.empty_count())
             if res.status == Status.RUNNING and r.stage_t > SWAP_MAX_S:
                 self.ctrl.reset()
+                self.abort_swap()
                 return self.swap_failed(r, "timeout", reverse=False)
             return self.swap_result(r, res)
         if st in ("retry", "reverse"):                     # straight back to the approach, yaw held
@@ -968,7 +980,17 @@ class Factory:
         why = res.reason or "failure"
         return self.swap_failed(r, why, reverse=(why == "misaligned"))
 
+    def abort_swap(self) -> None:
+        """Abandoned swap (failure, timeout, reset on the berth): packs still pinned on the carriage go
+        to full_stow and join the plant, so admission (full_stow clear, nothing pinned) can resume."""
+        hw = getattr(self, "hw", None)
+        if hw is None:
+            return
+        for p in hw.abort():
+            self.plant.setdefault(p, ["stowed", self.t, None])
+
     def swap_failed(self, r: Rover, why: str, reverse: bool):
+        self.abort_swap()
         self.counters["swap_failures"] += 1
         self.counters["faults"] += 1
         self.pending_recovery.add(r.i)
@@ -1228,6 +1250,7 @@ class Factory:
                 self.leave_queue(i)
                 if self.current == i:
                     self.ctrl.reset()
+                    self.abort_swap()
                     self.release(r)
                 r.stage, r.parked, r.goal, r.cmd_key = None, False, None, None
                 r.state, r.status, r.reason, r.fault_until = "fault", "FAILURE", kind, self.t + FAULT_HOLD_S
