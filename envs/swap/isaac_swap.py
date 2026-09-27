@@ -58,6 +58,8 @@ parser.add_argument("--author-disabled", action="store_true",
                          "default: authored enabled, opened after sim.reset() before the first step")
 parser.add_argument("--trace", action="store_true",
                     help="print rover x / vx / pack height / wheel commands every 0.25 s (diagnosis)")
+parser.add_argument("--start-x", type=float, default=None,
+                    help="start the rover here instead of START_X (e.g. 0 = on the berth; diagnosis)")
 parser.add_argument("--no-collide", default="",
                     help="comma-separated dock collider names to switch off before play (diagnosis)")
 AppLauncher.add_app_launcher_args(parser)     # --device: Isaac Lab's default (cuda:0); cpu is optional
@@ -190,7 +192,7 @@ class SwapScene:
         self.wheel_ids, _ = self.rover.find_joints(WHEELS, preserve_order=True)
         self.wheel_body_ids, self.wheel_body_names = self.rover.find_bodies("wheel_.*")
         self.cmd = [0.0, 0.0, 0.0, 0.0]
-        self._place_rover(START_X)
+        self._place_rover(START_X if args_cli.start_x is None else args_cli.start_x)
         # sim.reset()'s warm-up step runs with the primed spare latch still closed, which yanks the spare
         # from empty_ready toward the rover's bay (box run 27 Sep: it landed in the rover's path). Put it
         # back on its station at rest, as _place_rover does for the rover and its pack.
@@ -339,6 +341,10 @@ class SwapScene:
             pz = float(self.pack.data.root_pos_w.torch[0, 2])
             px = float(self.pack.data.root_pos_w.torch[0, 0])
             wv = [round(float(v), 2) for v in self.rover.data.joint_vel.torch[0, self.wheel_ids]]
+            if int(round(self.t / self.dt)) % max(1, int(round(2.0 / self.dt))) == 0:
+                dl = [round(float(v), 4) for v in self.dock.data.root_link_pos_w.torch[0]]
+                dc = [round(float(v), 4) for v in self.dock.data.root_com_pos_w.torch[0]]
+                print(f"[trace {self.t:6.2f}] dock link {dl} com {dc} lift {float(self.dock.data.joint_pos.torch[0, 0]):.4f}")
             print(f"[trace {self.t:6.2f}] {self.stage_name:8s} x={x:+.3f} y={y:+.3f} z={z:.3f} yaw={yaw:+.3f} "
                   f"vx={vx:+.3f} pack=({px:+.3f}, z {pz:.4f}) cmd={[round(c, 2) for c in self.cmd]} wheel_vel={wv}")
         m["max_lift_top"] = max(m["max_lift_top"], self.hw.carriage_top)
