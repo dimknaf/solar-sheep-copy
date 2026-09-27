@@ -186,6 +186,9 @@ class SwapScene:
         self.spare.write_root_pose_to_sim_index(
             root_pose=torch.tensor([[rp[0], rp[1], rp[2] + 0.0005, *rq]], device=self.dev))
         self.spare.write_root_velocity_to_sim_index(root_velocity=torch.zeros(1, 6, device=self.dev))
+        zj = torch.zeros(1, self.dock.num_joints, device=self.dev)           # carriage down, at rest
+        self.dock.write_joint_position_to_sim_index(position=zj)
+        self.dock.write_joint_velocity_to_sim_index(velocity=zj)
 
         self.hw = IsaacDockHardware(dock=self.dock, rovers=self.rover, packs=[self.pack, self.spare],
                                     bank=self.bank, stations=st, on_event=self._hw_event)
