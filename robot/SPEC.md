@@ -2,6 +2,25 @@
 
 **Owner: A (Dimitris)** · folder `robot/` · model `rover.xml` (MuJoCo MJCF)
 **Status: LOCKED** — 15 September 2026. B may build against every number below.
+**Amended 27 September 2026:** wheelbase 0.22 → **0.30 m** (owner's request, decided by an
+Omniverse/PhysX study — see *§0 · Omniverse (PhysX) measurements* just below and
+`docs/decisions.md` D10). MuJoCo figures further down that depend on the wheelbase (turn rate,
+break-over) are the 15 Sep values for the old 0.22 m rover unless marked.
+
+## §0 · Omniverse (PhysX) measurements — 27 Sep 2026
+
+Official Isaac Sim 6.1 importer + Isaac Lab 3.0 EA, PhysX TGS at 240 Hz (480 Hz gives the same
+numbers), wheel actuators in SI from rover.xml (`envs/isaac_rover/measure_rover.py`). Mass in
+simulation 29.4 kg.
+
+| wheelbase | top speed | spin (full differential) | climb 14° | climb 16° | 33° side slope | nose-over angle (static) |
+|---|---|---|---|---|---|---|
+| 0.22 m (old) | 0.2788 m/s | 0.644 rad/s | 0.148 m/s | stalls | holds | 30.5° (below the ~33° tyre slide) |
+| **0.30 m (current)** | **0.2789 m/s** | **0.585 rad/s** | **0.158 m/s** | **stalls** | **holds** | **38.8° — slides before it can flip** |
+| 0.36 m | 0.2788 m/s | 0.406 rad/s (too slow) | 0.135 m/s | stalls | holds | 44.0° |
+
+At 36° across the slope every variant slides without tipping; parked nose-up on 32° / 36° every
+variant rolls back (the 2.4 N·m motors cannot hold it) rather than flipping.
 
 Every value here was **measured from the compiled model** (`mj_forward`, mujoco 3.13.0), not read
 off the XML text and not copied from a comment. Where a header comment in `rover.xml` disagrees
@@ -43,7 +62,7 @@ That is wrong by 90°. Evidence, any one of which is sufficient:
 - All four wheel hinge axes are `(0,1,0)` — the wheels spin about **Y**, so the machine can only
   translate along **±X**.
 - Tyre cylinders are `fromto="0 -0.03 0  0 0.03 0"` — axle axis is Y.
-- Wheels at `x = ±0.110` (= the 0.22 m **wheelbase**) and `y = ±0.400` (= the 0.80 m **track**).
+- Wheels at `x = ±0.150` (= the 0.30 m **wheelbase**; ±0.110 / 0.22 m before 27 Sep) and `y = ±0.400` (= the 0.80 m **track**).
 - Bodywork: sensor pod + lens at `x = +0.264…+0.346`; rear carry handle at `x = −0.317`.
 - Measured: `ctrl = +3.1416` on all four for 8 s → `dx = +2.2159 m`, `dy = 0.0000 m`, quat
   unchanged. Body-frame velocimeter reads `(0.2792, 0, 0)`.
@@ -64,8 +83,8 @@ f/r body names and the bodywork. The fix belongs on the dock side or in C's worl
 | Overall plan footprint | **0.910 (X) × 1.010 (Y)** — the PV frame is the widest and longest part |
 | Overall height | **0.306** |
 | **Track** (wheel centres) | **0.800** (y = ±0.400) |
-| **Wheelbase** (axles) | **0.220** (x = ±0.110) |
-| track / wheelbase | 3.64 |
+| **Wheelbase** (axles) | **0.300** (x = ±0.150) — was 0.220 until 27 Sep |
+| track / wheelbase | 2.67 |
 | Wheel | radius **0.090**, width 0.060 (half 0.030) |
 | Tyre inner faces | \|y\| = **0.370** → **0.740 m of clear span between them** |
 | Tyre outer faces | \|y\| = 0.430 → **0.860 m over tyres** |
@@ -160,8 +179,8 @@ carriage sitting on the surface.
 | S — straddle | Pad narrow (≤ 0.55) between the wheels, rover stays on grade; the well must be **dug below grade** | needs a real hole modelled in the world file |
 
 Option P is strongly preferred: the recess comes free inside pad material, and the rover's
-break-over angle is `atan(0.060 / 0.110) = 28.6°`, so a short wheelbase makes the pad crest a
-non-issue.
+break-over angle is `atan(0.060 / 0.150) = 21.8°` (28.6° at the old 0.22 m wheelbase), still far
+above any pad-crest slope.
 
 **Ramp, if B uses option P:** the rover **climbs 14° and stalls at 16°**. Use **≤ 10°**.
 
@@ -313,7 +332,7 @@ model stays lean at `nq 11`; only the demo model carries the extra 6 DoF.
 **FROZEN — B may build against these and A will not move them:**
 
 forward axis (+X) · `battery_mount` pose, name and direction · pack outer size, mass and 0.060
-underside · the 0.045 drive-over ceiling · track 0.800, wheelbase 0.220, wheel radius 0.090 ·
+underside · the 0.045 drive-over ceiling · track 0.800, wheelbase 0.300 (amended 27 Sep), wheel radius 0.090 ·
 0.740 clear span · actuator names, order, ctrlrange and forcerange · climb 14° / stall 16° · mass,
 CoM, top speed, turn rate.
 

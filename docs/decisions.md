@@ -5,6 +5,30 @@ Details of every skill mentioned: [docs/skills.md](skills.md).
 
 ---
 
+## D10 · 27 Sep 2026 — Wheelbase 0.22 → 0.30 m
+- **Owner:** "the rovers should have the wheels put a bit wider… the two axles are so close."
+- **Why it mattered:** with the centre of mass 0.1865 m up, a 0.22 m wheelbase pitches over at
+  30.5°, below the ~33° at which the tyres slide — so on a steep slope the rover could flip
+  end-over-end before it slides. A longer wheelbase fixes that but makes skid-steer turning harder
+  (the design notes: at 0.40 m the old prototype could not turn at all).
+- **Decided by measurement in Omniverse (PhysX, `measure_rover.py`, robot/SPEC.md §0):** 0.22 / 0.30 /
+  0.36 m. **0.30 m** keeps the spin at 0.585 rad/s (spec 0.571), climbs 14° best (0.158 m/s),
+  and raises the nose-over angle to 38.8° (slides first). 0.36 m turned at only 0.406 rad/s.
+- **Changed:** `robot/rover.xml` (wheel bodies and axle stubs at x = ±0.15), the generated import
+  files, `robot/SPEC.md`. Mass, CoM, track, speed unchanged. The MuJoCo swap demo and the 6 dock
+  tests still pass (wheels clear the lift slot, all four on the pad).
+
+## D11 · 27 Sep 2026 — MuJoCo-Warp cross-check moves into the training environment
+- Newton/MuJoCo-Warp needs Isaac Lab's scene cloning; the standalone measurement places copies by
+  hand and fails there (`ValueError: Invalid default value tensor shape`). PhysX is unaffected.
+  The engine cross-check is done on the trained policy inside the task (G4, PP vs PN), which uses
+  the cloner. The original spec numbers were measured in MuJoCo, so that comparison already exists.
+
+## D12 · 27 Sep 2026 — Potential-based shaping for the target reward
+- The prototype's per-step pos + head reward made stopping short of a target worth more than
+  completing it (G3 review). The task pays pos + head as gamma·Φ(s') − Φ(s) instead
+  (Ng, Harada & Russell 1999): hovering earns nothing and the optimal policy is unchanged.
+
 ## D9 · 25 Sep 2026 — All new work on branch `real-sim`
 - `physical-ai` (39f8594, the 15 Sep hackathon state) and `main` are frozen: no
   commits, pushes, resets or tags.

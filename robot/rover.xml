@@ -38,7 +38,14 @@
        wheel width      0.060 m    : wide enough that 30 kg on grass does not
                                      sink or rut; also widens the contact patch
                                      so skid-steer scrub is predictable.
-       wheelbase        0.220 m    : axles at x = +/-0.11. VERY short, and the
+       wheelbase        0.300 m    : axles at x = +/-0.15 (was 0.22, widened 27 Sep
+                                     2026 at the owner's request after an Omniverse/PhysX
+                                     study of 0.22 / 0.30 / 0.36 m: 0.30 keeps the spin
+                                     at 0.585 rad/s and raises the nose-over angle from
+                                     30.5 to 38.8 deg, above the ~33 deg tyre slide, so
+                                     the rover slides before it can flip; 0.36 turned at
+                                     only 0.406 rad/s. docs/decisions.md D10.)
+                                     Still short, and the
                                      single most load-bearing number in the
                                      model. A skid-steer spin drags every wheel
                                      sideways; that resisting moment scales with
@@ -115,8 +122,9 @@
        COMPROMISES, both real:
          - The pack is the limiting ground clearance at 60 mm. Fine on mown or
            grazed pasture, not fine in long grass.
-         - The short wheelbase costs PITCH stability: half-wheelbase 0.11 against
-           a CoG 0.1865 up is only a 30.5 deg nose-over angle, and the wide track
+         - The short wheelbase costs PITCH stability: half-wheelbase 0.15 against
+           a CoG 0.1865 up gives a 38.8 deg nose-over angle (30.5 at the old 0.22 m
+           wheelbase - hence the widening), and the wide track
            does nothing for that axis. It is safe only because the drivetrain is
            too weak to climb that far: measured, the rover climbs 14 deg at
            0.271 m/s and stalls at 16 deg, so it can never reach the angle that
@@ -332,13 +340,13 @@
            Visual only - the wheel hinges are still parented straight to the
            chassis, so these add no bodies, no mass and no dynamics. -->
       <geom class="visual" name="axle_fl" type="capsule"
-            fromto="0.11 0.18 -0.085 0.11 0.37 -0.085" size="0.018" material="body_dark"/>
+            fromto="0.15 0.18 -0.085 0.15 0.37 -0.085" size="0.018" material="body_dark"/>
       <geom class="visual" name="axle_fr" type="capsule"
-            fromto="0.11 -0.18 -0.085 0.11 -0.37 -0.085" size="0.018" material="body_dark"/>
+            fromto="0.15 -0.18 -0.085 0.15 -0.37 -0.085" size="0.018" material="body_dark"/>
       <geom class="visual" name="axle_rl" type="capsule"
-            fromto="-0.11 0.18 -0.085 -0.11 0.37 -0.085" size="0.018" material="body_dark"/>
+            fromto="-0.15 0.18 -0.085 -0.15 0.37 -0.085" size="0.018" material="body_dark"/>
       <geom class="visual" name="axle_rr" type="capsule"
-            fromto="-0.11 -0.18 -0.085 -0.11 -0.37 -0.085" size="0.018" material="body_dark"/>
+            fromto="-0.15 -0.18 -0.085 -0.15 -0.37 -0.085" size="0.018" material="body_dark"/>
 
       <!-- ---- PV MODULE, fixed flat on the deck, 35 mm standoff for airflow ---- -->
       <geom class="visual" name="post_fl" type="cylinder" fromto="0.22 0.18 0.058 0.22 0.18 0.096" size="0.013" material="body_dark"/>
@@ -385,7 +393,7 @@
 
       <!-- ====================  WHEELS  ====================
            axle z_local = 0.090 - 0.175 = -0.085
-           x = +/-0.110 (0.22 m wheelbase), y = +/-0.400 (0.80 m track).
+           x = +/-0.150 (0.30 m wheelbase), y = +/-0.400 (0.80 m track).
            Wheel half-width 0.030 puts the inner face at 0.370 and the outermost
            painted detail at 0.446, which is 49 mm inside the 0.495 glass edge
            and 59 mm inside the 0.505 frame edge: NOTHING pokes out past the
@@ -396,28 +404,28 @@
            video, and a plain black cylinder reads as a stationary black disc.
            At this speed the wheels turn once every two seconds - the spoke bar
            is doing real work for the demo. -->
-      <body name="wheel_fl_body" pos="0.11 0.40 -0.085">
+      <body name="wheel_fl_body" pos="0.15 0.40 -0.085">
         <joint class="wheel" name="wheel_fl"/>
         <geom class="wheel" name="tyre_fl" fromto="0 -0.03 0 0 0.03 0" size="0.09" mass="1.1"/>
         <geom class="visual" name="hub_fl" type="cylinder" fromto="0 0.030 0 0 0.040 0" size="0.050" material="hub"/>
         <geom class="visual" name="spoke_fl" type="box" size="0.070 0.005 0.013" pos="0 0.041 0" material="body"/>
       </body>
 
-      <body name="wheel_fr_body" pos="0.11 -0.40 -0.085">
+      <body name="wheel_fr_body" pos="0.15 -0.40 -0.085">
         <joint class="wheel" name="wheel_fr"/>
         <geom class="wheel" name="tyre_fr" fromto="0 -0.03 0 0 0.03 0" size="0.09" mass="1.1"/>
         <geom class="visual" name="hub_fr" type="cylinder" fromto="0 -0.030 0 0 -0.040 0" size="0.050" material="hub"/>
         <geom class="visual" name="spoke_fr" type="box" size="0.070 0.005 0.013" pos="0 -0.041 0" material="body"/>
       </body>
 
-      <body name="wheel_rl_body" pos="-0.11 0.40 -0.085">
+      <body name="wheel_rl_body" pos="-0.15 0.40 -0.085">
         <joint class="wheel" name="wheel_rl"/>
         <geom class="wheel" name="tyre_rl" fromto="0 -0.03 0 0 0.03 0" size="0.09" mass="1.1"/>
         <geom class="visual" name="hub_rl" type="cylinder" fromto="0 0.030 0 0 0.040 0" size="0.050" material="hub"/>
         <geom class="visual" name="spoke_rl" type="box" size="0.070 0.005 0.013" pos="0 0.041 0" material="body"/>
       </body>
 
-      <body name="wheel_rr_body" pos="-0.11 -0.40 -0.085">
+      <body name="wheel_rr_body" pos="-0.15 -0.40 -0.085">
         <joint class="wheel" name="wheel_rr"/>
         <geom class="wheel" name="tyre_rr" fromto="0 -0.03 0 0 0.03 0" size="0.09" mass="1.1"/>
         <geom class="visual" name="hub_rr" type="cylinder" fromto="0 -0.030 0 0 -0.040 0" size="0.050" material="hub"/>
