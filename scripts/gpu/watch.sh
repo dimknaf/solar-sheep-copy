@@ -16,6 +16,6 @@ IP="${VM_IP:-$(cat "$HOME/.solar/vm_ip")}"
 KEY="${SSH_KEY:-$HOME/.ssh/solar_nebius}"
 exec ssh -i "$KEY" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
   -o ExitOnForwardFailure=yes -N \
-  -L 127.0.0.1:8080:127.0.0.1:8080 \
-  -L 127.0.0.1:6006:127.0.0.1:6006 \
+  -L "127.0.0.1:${LOCAL_VIEW_PORT:-18080}:127.0.0.1:8080" \
+  -L "127.0.0.1:${LOCAL_TB_PORT:-16006}:127.0.0.1:6006" \
   "solar@$IP"
