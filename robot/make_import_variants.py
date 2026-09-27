@@ -19,8 +19,9 @@ rover_swap.xml: rover.xml as-is minus the scene.  The importer turns the
 `pack_latch` weld into a FixedJoint excluded from the articulation, which the
 dock releases at runtime (docs/decisions.md D6).
 
-The solar-panel design (flat as built, fixed tilt, or tilt motor) is an open
-owner decision; make it in rover.xml and re-run this script.
+The solar panel is fixed at a 20 deg tilt toward the nose (owner decision, 27 Sep 2026;
+robot/SPEC.md §2a): its geoms carry a quat, which both variants copy unchanged. Any panel
+change is made in rover.xml, then re-run this script.
 
 Wheelbase study (owner, 27 Sep: "the two axles are so close" - the rover may flip):
     python robot/make_import_variants.py --wheelbase 0.30 0.36

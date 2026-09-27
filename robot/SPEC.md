@@ -6,6 +6,10 @@
 Omniverse/PhysX study — see *§0 · Omniverse (PhysX) measurements* just below and
 `docs/decisions.md` D10). MuJoCo figures further down that depend on the wheelbase (turn rate,
 break-over) are the 15 Sep values for the old 0.22 m rover unless marked.
+**Amended 27 September 2026 (2):** the PV panel is **fixed at a 20° tilt toward the nose** (owner
+decision; was flat). The rover aims it by yawing — see *§2a · PV panel* and `docs/decisions.md`
+D13. It raised the CoM 0.1865 → **0.2153 m**; the geometry, site and stability numbers below are
+updated where marked *(20° panel)*.
 
 ## §0 · Omniverse (PhysX) measurements — 27 Sep 2026
 
@@ -21,6 +25,12 @@ simulation 29.4 kg.
 
 At 36° across the slope every variant slides without tipping; parked nose-up on 32° / 36° every
 variant rolls back (the 2.4 N·m motors cannot hold it) rather than flipping.
+
+These were measured with the **flat** panel. With the **20° panel** the static nose-over of the
+0.30 m rover drops to **34.9°** (CoM z 0.2153, x 0.0000 → same both ways) — still above the ~33°
+tyre slide, margin 1.9° instead of 5.8°. Roll-tip 61.7°. The PhysX table has **not** been re-run
+for the tilted panel; in MuJoCo top speed is unchanged (0.2792 m/s) and the full-differential spin
+drops 4 %, 0.476 → 0.456 rad/s.
 
 Every value here was **measured from the compiled model** (`mj_forward`, mujoco 3.13.0), not read
 off the XML text and not copied from a comment. Where a header comment in `rover.xml` disagrees
@@ -78,10 +88,10 @@ f/r body names and the bodywork. The fix belongs on the dock side or in C's worl
 | Part | Value |
 |---|---|
 | Chassis shell (collidable) | 0.560 (X) × 0.460 (Y) × 0.120 (Z), world z **0.115 … 0.235** |
-| PV frame (collidable) | 0.910 × 1.010 × 0.020, world z 0.270 … 0.290 |
-| PV glass (collidable) | 0.890 × 0.990 × 0.016, world z 0.290 … 0.306 → **0.8811 m²** |
-| Overall plan footprint | **0.910 (X) × 1.010 (Y)** — the PV frame is the widest and longest part |
-| Overall height | **0.306** |
+| PV frame (collidable) | 0.910 × 1.010 × 0.020, tilted 20°: world z **0.210** (front edge) … 0.540 (rear edge) *(20° panel; flat was 0.270 … 0.290)* |
+| PV glass (collidable) | 0.890 × 0.990 × 0.016, world z 0.232 … 0.552 → **0.8811 m²** *(20° panel)* |
+| Overall plan footprint | **0.862 (X) × 1.010 (Y)**, x −0.436 … +0.427 — still the PV frame *(20° panel; 0.910 × 1.010 flat — the tilt only shrinks it)* |
+| Overall height | **0.552** — the rear glass corner *(20° panel; 0.306 flat)* |
 | **Track** (wheel centres) | **0.800** (y = ±0.400) |
 | **Wheelbase** (axles) | **0.300** (x = ±0.150) — was 0.220 until 27 Sep |
 | track / wheelbase | 2.67 |
@@ -89,6 +99,7 @@ f/r body names and the bodywork. The fix belongs on the dock side or in C's worl
 | Tyre inner faces | \|y\| = **0.370** → **0.740 m of clear span between them** |
 | Tyre outer faces | \|y\| = 0.430 → **0.860 m over tyres** |
 | Outermost detail (spoke) | \|y\| = 0.446 — 49 mm inside the glass edge; nothing pokes out |
+| Wheels vs panel outline | all wheel parts (x ±0.240, \|y\| ≤ 0.446) inside the panel's plan outline: 187 mm (front), 196 mm (rear), 59 mm (each side) *(20° panel)* |
 
 ### Ground clearances (flat ground, unladen, settled)
 
@@ -104,6 +115,38 @@ f/r body names and the bodywork. The fix belongs on the dock side or in C's worl
 | Axle centreline | — | 0.0900 |
 
 Settling under load costs 0.14 mm of tyre sink — negligible, ignore it.
+
+---
+
+## §2a · PV panel — fixed 20° tilt (DECIDED 27 Sep 2026)
+
+| | |
+|---|---|
+| Mount | **fixed**, no gimbal, no tilt motor. The rover yaws to aim it — heading on the sun's azimuth = panel facing the sun |
+| Tilt | **20°** about chassis +Y, leaning toward the **nose** (+X): front edge low, rear edge high |
+| **Normal, chassis frame** | **(sin 20°, 0, cos 20°) = (0.342, 0, 0.940)** — site `panel_normal` +Z |
+| Normal, world, level rover at yaw ψ | (0.342 cos ψ, 0.342 sin ψ, 0.940) |
+| **Exposure** | **max(0, n_w · s)**, s = unit vector toward the sun; peak 195.6 W × weather × exposure |
+| Frame centre (pivot) | chassis (−0.0045, 0, 0.200) → world (−0.0045, 0, 0.375); x offset puts the panel's own CoM at x = 0 |
+| Structure | two short front posts at x = +0.22 (the hinge line), two tall rear posts at x = −0.22, a diagonal strut each side (all visual, mass 0) |
+| Mass | unchanged: frame 2.5 + laminate 6.5 = 9.0 kg (inertia rotated with it: body I_xz 0.193 kg·m²) |
+
+**Why the pivot is at z = 0.200 (chassis).** That is the lowest panel that clears everything under
+its dropped front edge, and every millimetre of it is CoM. Clearances at the chosen height:
+
+| Constraint | Clearance |
+|---|---|
+| Rangefinder fan, as configured (RF_POS (0.34, 0, 0.005), 9 rays −90…+90°, **+4°** up, 3 m, `ray_alignment="base"` = rigid with the chassis, so chassis pitch/roll cannot change it) | **min 15.2 mm** (±67.5° rays under the front edge); ±90° 22 mm; ±45° 22 mm; 0°/±22.5° 24 mm |
+| Same fan, level (0°) / −4° | 30.0 / 35.5 mm |
+| Same fan, world-stabilised (`"yaw"` alignment) under ±8° chassis pitch | 3.4 mm worst (+8° nose-down) — clear, but thin |
+| Fan tilt that still clears | **≤ 6°** (5.5 mm); 6.5° → 1.3 mm; **≥ 7° the ±90° rays clip the frame edge** (a flat panel allowed ~10°) |
+| Posts / struts vs any ray | never in the fan's path (x ≤ 0.233, the fan starts at x = 0.34) |
+| Sensor pod top (z 0.050 at x ≤ 0.340) | 14.0 mm vertical (13.1 mm perpendicular) |
+| Shell front top edge | 25.8 mm vertical |
+| Dock (swap demo, rover swept x −1.6…+1.6 m) | ≥ 140 mm to any dock geom; tallest dock part 0.155 m vs panel's lowest 0.210 m |
+
+Note: Isaac Lab's ray caster only hits `/World/ground`, so the panel could never read as an
+obstacle in training; the clearance above is what a real sensor on the real machine needs.
 
 ---
 
@@ -138,11 +181,11 @@ pad — the numbers are identical either way).
 |---|---|---|
 | 0.000 … 0.227 | **0.0575** straps | 0.0600 battery |
 | 0.227 … 0.232 | 0.1130 sill | 0.1150 shell |
-| 0.232 … 0.370 | 0.0720 stub axles | 0.2700 PV frame |
+| 0.232 … 0.370 | 0.0720 stub axles | 0.2100 PV frame front edge *(20° panel; was 0.2700)* |
 | **0.370 … 0.430** | **0 — TYRE CONTACT PATCH. Nothing may be here.** | 0 |
-| 0.430 … 0.440 | 0.0400 hubs | 0.2700 |
-| 0.440 … 0.446 | 0.0770 spokes | 0.2700 |
-| 0.446 … 0.505 | 0.2700 PV frame — free air under the panel overhang | 0.2700 |
+| 0.430 … 0.440 | 0.0400 hubs | 0.2100 |
+| 0.440 … 0.446 | 0.0770 spokes | 0.2100 |
+| 0.446 … 0.505 | 0.2100 PV frame front edge (0.210 at x = +0.427 rising to 0.540 at x = −0.436) — free air under the panel overhang | 0.2100 |
 | > 0.505 | unlimited — outside the machine's silhouette | unlimited |
 
 > **Working rule for B: nothing in the drive lane above `z = 0.045`.**
@@ -230,12 +273,12 @@ speed (0.117 m/s) — that is A's job, not B's, and A accepts it.
 | Site | Local pos (in `chassis`) | World pos | +Z | Purpose |
 |---|---|---|---|---|
 | `battery_mount` | (0, 0, −0.115) | (0, 0, **0.060**) | **(0,0,−1) DOWN** | dock interface |
-| `panel_normal` | (0, 0, 0.181) | (0, 0, 0.356) | **(0,0,+1) UP** | `dot(+Z, sun_dir)` |
+| `panel_normal` | (0.0215, 0, 0.2714) | (0.0215, 0, 0.4464) | **(0.342, 0, 0.940)** — 20° toward the nose *(20° panel; was (0,0,+1) at (0, 0, 0.181))* | `max(0, dot(+Z, sun_dir))` |
 | `imu` | (0, 0, 0) | (0, 0, 0.175) | (0,0,+1) | body-frame sensors |
 
 > `panel_normal` was originally declared with `fromto` and compiled with its frame **Z pointing
 > down**, silently negating every exposure reading. It is now set with an explicit `zaxis` and the
-> sensor reads `[0, 0, 1]`. **Do not revert it to `fromto`** — in MuJoCo 3.13 a `fromto` frame's +Z
+> sensor reads `[0.342, 0, 0.940]` on a level rover at yaw 0 (`[0, 0, 1]` before the tilt). **Do not revert it to `fromto`** — in MuJoCo 3.13 a `fromto` frame's +Z
 > runs from the *second* point back to the *first*.
 
 | Sensor | Type | Width | Reads |
@@ -283,14 +326,14 @@ whole 29.4 kg rover.**
 
 | | |
 |---|---|
-| Mass | **29.400 kg** · loaded CoM z = **0.186497** |
+| Mass | **29.400 kg** · loaded CoM **x = 0.0000, z = 0.21534** *(20° panel; z was 0.186497 flat)* |
 | Top speed | **0.279 m/s** at 8.2 W mech (~16 W electrical) |
 | Harvest speed | 0.117 m/s at 3.3 W mech |
-| Turn rate, spin in place | **0.571 rad/s** at 20.6 W mech (~41 W electrical) |
+| Turn rate, spin in place | **0.571 rad/s** at 20.6 W mech (~41 W electrical) — 0.22 m wheelbase. At 0.30 m, MuJoCo: 0.476 flat, **0.456 rad/s with the 20° panel** (PhysX 0.585 flat, §0) |
 | **Climb limit** | **14°** at 0.271 m/s — **stalls at 16°** |
-| Nose-over (pitch) | 30.5° — the weak axis, by a factor of two |
+| Nose-over (pitch) | **34.9°** both ways *(20° panel, 0.30 m wheelbase: atan(0.150 / 0.2153))*; 38.8° flat; 30.5° at 0.22 m — still the weak axis, still above the ~33° slide |
 | Break-over | 28.6° |
-| Roll-tip | 65° — but it **slides at 33°** on μ = 0.65, so it never reaches tip |
+| Roll-tip | **61.7°** *(20° panel: atan(0.400 / 0.2153))*; 65.0° flat — but it **slides at 33°** on μ = 0.65, so it never reaches tip |
 | Envelope corner | **30.2 W mechanical** |
 
 **Product thesis:** ~30 W of motion buys up to ~196 W of aimed collection. A spin costs ~2.5× cruise
@@ -334,12 +377,13 @@ model stays lean at `nq 11`; only the demo model carries the extra 6 DoF.
 forward axis (+X) · `battery_mount` pose, name and direction · pack outer size, mass and 0.060
 underside · the 0.045 drive-over ceiling · track 0.800, wheelbase 0.300 (amended 27 Sep), wheel radius 0.090 ·
 0.740 clear span · actuator names, order, ctrlrange and forcerange · climb 14° / stall 16° · mass,
-CoM, top speed, turn rate.
+CoM, top speed, turn rate · **PV panel fixed at 20° toward the nose, normal (sin 20°, 0, cos 20°)
+in the chassis frame, aimed by yawing to the sun's azimuth, exposure = max(0, n_w · s)** (decided
+27 Sep, §2a).
 
 **OPEN — check before depending on:**
 
-chassis styling and colours · panel tilt (flat today; a single pitch actuator is still under
-consideration — it would move `panel_normal`, never `battery_mount`) · μ assumption (0.65 pasture;
+chassis styling and colours · μ assumption (0.65 pasture;
 0.80 also verified to turn) · whether the straps get raised 3 mm to make the rendered floor equal
 the collidable floor (cosmetic, A's call, see below).
 
@@ -366,7 +410,7 @@ the collidable floor (cosmetic, A's call, see below).
 | Header comment says | Measured | Note |
 |---|---|---|
 | glass "= 0.900 m² exactly" | **0.8811 m²** | 2.1 % short → 195.6 W peak at 222 W/m², not 200 W |
-| "overall length … is 0.90 m" | **0.910** | PV frame outer |
+| "overall length … is 0.90 m" | **0.910** flat, **0.862** in plan with the 20° panel | fixed 27 Sep: the comment now says 0.86 m (0.91 flat) |
 | pack bottom "the lowest point on the machine" | straps at **0.0575** | true for collidable geometry only |
 
 None of these are load-bearing for B. The pack, the mount frame and the clearances are all correct

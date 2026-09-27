@@ -5,6 +5,20 @@ Details of every skill mentioned: [docs/skills.md](skills.md).
 
 ---
 
+## D13 · 27 Sep 2026 — Solar panel: fixed 20° tilt toward the nose; the rover yaws to face the sun
+- **Owner's choice** (27 Sep) among flat / fixed tilt / tilt motor. A flat panel made heading
+  irrelevant to harvest; with a fixed tilt, facing the sun is real, measurable behaviour, and the
+  skid-steer body is the solar tracker - no gimbal, no extra actuator or failure point.
+- **Normal** in the chassis frame (sin 20°, 0, cos 20°); exposure = max(0, n_w·s), power
+  195.6 W × weather × exposure.
+- **Geometry:** frame centre at chassis (-0.0045, 0, 0.200) on a front hinge line (short front
+  posts, tall rear posts, diagonal struts) - the lowest panel that keeps the rangefinder fan 15 mm
+  clear. Plan footprint 0.910×1.010 → 0.862×1.010 m, wheels still inside the outline, ≥ 140 mm from
+  every dock part in the MuJoCo swap.
+- **Cost:** mass unchanged (29.4 kg); CoM z 0.1865 → 0.2153 m; nose-over 38.8° → 34.9° (still above
+  the ~33° tyre slide, so it slides before it flips); roll-tip 65.0° → 61.7°; MuJoCo spin −4 %.
+  The rangefinder fan must stay ≤ ~6° up. PhysX numbers re-measured on the box (robot/SPEC.md §0).
+
 ## D10 · 27 Sep 2026 — Wheelbase 0.22 → 0.30 m
 - **Owner:** "the rovers should have the wheels put a bit wider… the two axles are so close."
 - **Why it mattered:** with the centre of mass 0.1865 m up, a 0.22 m wheelbase pitches over at
@@ -110,10 +124,7 @@ Details of every skill mentioned: [docs/skills.md](skills.md).
 ---
 
 ## Open (owner)
-1. **Solar panel: flat (as built), fixed tilt, or a tilt motor?** A flat panel's normal
-   is +Z, so yawing toward the sun changes nothing on level ground (flagged 15 Sep;
-   `robot/SPEC.md` §11 lists it OPEN). Must be settled before the final rover import —
-   it changes mass, CoM, climb and tip-over.
+1. ~~Solar panel: flat, fixed tilt, or a tilt motor?~~ Decided 27 Sep: fixed 20° tilt (D13).
 2. **Battery swap:** proposed — train the approach and berthing; lift and latch
    mechanical and physics-driven, never teleported.
 3. **Real hardware before 30 Oct:** proposed no; ship the exported policy + I/O

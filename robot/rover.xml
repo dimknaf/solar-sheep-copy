@@ -44,7 +44,9 @@
                                      at 0.585 rad/s and raises the nose-over angle from
                                      30.5 to 38.8 deg, above the ~33 deg tyre slide, so
                                      the rover slides before it can flip; 0.36 turned at
-                                     only 0.406 rad/s. docs/decisions.md D10.)
+                                     only 0.406 rad/s. docs/decisions.md D10. The 20 deg
+                                     panel tilt of the same day raised the CoG and took
+                                     nose-over to 34.9 deg - still above the slide.)
                                      Still short, and the
                                      single most load-bearing number in the
                                      model. A skid-steer spin drags every wheel
@@ -62,9 +64,11 @@
                                      Widening from 0.56 m was asked for on
                                      stability grounds and it delivers, but not
                                      the way you would expect - see TRACK WIDTH:
-                                     WHAT IT BOUGHT below. Roll-tip 65 deg.
+                                     WHAT IT BOUGHT below. Roll-tip 65 deg flat panel,
+                                     61.7 deg with the 20 deg tilt.
        chassis box      0.56 x 0.46 x 0.12 m : a crate, not a car. Overall length
-                                     including the panel overhang is 0.90 m, in
+                                     including the panel overhang is 0.86 m in plan
+                                     with the 20 deg tilt (0.91 m flat), in
                                      the requested 0.6-0.9 m band, and it drives
                                      1 m lanes in a 16 x 10 m pasture.
        ground clearance 0.115 m under the chassis, 0.060 m under the battery
@@ -76,15 +80,20 @@
        => 0.90 m^2 of module.  Modelled as 0.90 m (fore-aft) x 1.00 m (lateral)
        = 0.900 m^2 exactly.  A 20%-efficient module would need 1.0 m^2.
        THE PANEL OVERHANGS THE CHASSIS AND THAT IS DELIBERATE AND REALISTIC:
-       0.17 m fore and aft beyond the 0.56 m body, and 0.07 m each side beyond
+       ~0.15 m fore and aft beyond the 0.56 m body in plan (0.17 m along the
+       tilted panel), and 0.07 m each side beyond
        the 0.86 m over-wheels width - the panel is now very nearly the exact
        plan-view silhouette of the machine, which is the tidiest a solar rover
        can look. Real solar rovers and solar mowers all look
        like this - the panel is the biggest, cheapest part and the chassis is
        sized by the battery and drivetrain, not by the panel. The overhang also
        shades the body, which helps the electronics.
-       Panel is FIXED to the deck - no gimbal. The body yaws to aim it, which is
-       why site "panel_normal" below is what the sun model will read.
+       Panel is FIXED to the deck at a 20 deg tilt toward the nose - no gimbal,
+       no tilt motor (owner decision, 27 Sep 2026). The body yaws to aim it:
+       heading on the sun's azimuth = panel facing the sun. That is why site
+       "panel_normal" below, normal (sin20, 0, cos20) in the chassis frame, is
+       what the sun model reads: exposure = max(0, n_world . sun_dir). Flat, the
+       heading changed nothing; tilted, skid steer IS the solar tracker.
 
        ---- MASS BUDGET (kg) ------------------------------------------------
        chassis shell + drives + electronics  12.0   welded ali box + 4 gearmotors
@@ -104,11 +113,12 @@
        inner faces). It is a wide flat slab, not a brick, because the short
        wheelbase leaves no fore-aft room - and a wide flat pack is easier for a
        ground dock to catch anyway. Two reasons, both intentional:
-         1. Low CoG. MuJoCo computes the loaded CoG at z = 0.1865 m; against the
-            0.40 m half-track that is a 65.0 deg static roll-tip angle. Move the
-            same pack up onto the deck and the CoG rises to ~0.202 m and the tip
-            angle drops to ~63 deg. Only a couple of degrees, but it is free, and
-            it counteracts the 9 kg of glass sitting 0.30 m up.
+         1. Low CoG. MuJoCo computes the loaded CoG at z = 0.2153 m with the
+            20 deg panel (0.1865 flat); against the 0.40 m half-track that is a
+            61.7 deg static roll-tip angle (65.0 flat). Move the same pack up
+            onto the deck and the CoG rises to ~0.231 m and the tip angle drops
+            to ~60 deg. Only a couple of degrees, but it is free, and it
+            counteracts the 9 kg of glass whose centre sits 0.39 m up.
             The number that actually matters, and it is NOT the tip angle: tyre
             friction is 0.65, so the machine SLIDES at a 33 deg cross-slope and
             would only TIP at 65 deg. Measured: parked across a 33 deg slope it
@@ -123,8 +133,9 @@
          - The pack is the limiting ground clearance at 60 mm. Fine on mown or
            grazed pasture, not fine in long grass.
          - The short wheelbase costs PITCH stability: half-wheelbase 0.15 against
-           a CoG 0.1865 up gives a 38.8 deg nose-over angle (30.5 at the old 0.22 m
-           wheelbase - hence the widening), and the wide track
+           a CoG 0.2153 up gives a 34.9 deg nose-over angle with the 20 deg panel
+           (38.8 flat; 30.5 at the old 0.22 m wheelbase - hence the widening),
+           still above the ~33 deg slide, and the wide track
            does nothing for that axis. It is safe only because the drivetrain is
            too weak to climb that far: measured, the rover climbs 14 deg at
            0.271 m/s and stalls at 16 deg, so it can never reach the angle that
@@ -348,20 +359,52 @@
       <geom class="visual" name="axle_rr" type="capsule"
             fromto="-0.15 -0.18 -0.085 -0.15 -0.37 -0.085" size="0.018" material="body_dark"/>
 
-      <!-- ---- PV MODULE, fixed flat on the deck, 35 mm standoff for airflow ---- -->
-      <geom class="visual" name="post_fl" type="cylinder" fromto="0.22 0.18 0.058 0.22 0.18 0.096" size="0.013" material="body_dark"/>
-      <geom class="visual" name="post_fr" type="cylinder" fromto="0.22 -0.18 0.058 0.22 -0.18 0.096" size="0.013" material="body_dark"/>
-      <geom class="visual" name="post_rl" type="cylinder" fromto="-0.22 0.18 0.058 -0.22 0.18 0.096" size="0.013" material="body_dark"/>
-      <geom class="visual" name="post_rr" type="cylinder" fromto="-0.22 -0.18 0.058 -0.22 -0.18 0.096" size="0.013" material="body_dark"/>
+      <!-- ---- PV MODULE, FIXED 20 deg TILT, leaning toward the nose (27 Sep 2026) ----
+           Owner decision: no tilt motor; the rover yaws its body to face the sun
+           (skid steer = aiming the panel). The whole panel is rotated 20 deg about
+           chassis +Y, so its normal in the chassis frame is (sin20, 0, cos20) =
+           (0.342, 0, 0.940): front edge low, rear edge high, facing +X. With the
+           heading on the sun's azimuth, exposure = max(0, n_world . sun_dir).
+           GEOMETRY. Every panel geom below is its flat-panel geom rotated by
+           quat (cos10, 0, sin10, 0) about the frame centre P = (-0.0045, 0, 0.200);
+           the local offsets (glass 18 mm, busbars 18.5 mm, normal site 76 mm above
+           the frame centre) are unchanged, only rotated. Masses unchanged.
+           WHY P IS WHERE IT IS - the lowest panel that clears everything:
+             - the rangefinder fan binds, not the bodywork: the +/-67.5 deg rays
+               leave under the dropped front edge 15 mm clear, the +/-90 deg rays
+               22 mm (fan from RF_POS (0.34, 0, 0.005), tilted 4 deg up, 3 m);
+             - the frame underside passes 14 mm over the sensor-pod top at
+               x = 0.34 and 26 mm over the shell's front top edge;
+             - P.x = -0.0045 puts the panel's own centre of mass at x = 0, so the
+               machine's CoM stays on the centreline and nose-over is the same
+               both ways.
+           The price is height: the frame centre rises 95 mm (0.105 -> 0.200) and
+           the machine's CoM 28.8 mm, the rear glass corner is at world z 0.552,
+           and the plan footprint SHRINKS to 0.862 x 1.010 m (x -0.436 .. +0.427).
+           MOUNT: a front hinge line on two short posts (x = +0.22) and two tall
+           posts at the back (x = -0.22), each side triangulated by a diagonal strut
+           down to the front post foot. A fixed tilt, so the "hinge" is only the
+           pivot the angle is set about at assembly. Posts end 5 mm inside the
+           frame so no daylight shows where a round post meets a sloped rail. -->
+      <geom class="visual" name="post_fl" type="cylinder" fromto="0.22 0.18 0.058 0.22 0.18 0.113" size="0.013" material="body_dark"/>
+      <geom class="visual" name="post_fr" type="cylinder" fromto="0.22 -0.18 0.058 0.22 -0.18 0.113" size="0.013" material="body_dark"/>
+      <geom class="visual" name="post_rl" type="cylinder" fromto="-0.22 0.18 0.058 -0.22 0.18 0.273" size="0.013" material="body_dark"/>
+      <geom class="visual" name="post_rr" type="cylinder" fromto="-0.22 -0.18 0.058 -0.22 -0.18 0.273" size="0.013" material="body_dark"/>
+      <geom class="visual" name="brace_l" type="capsule" fromto="-0.22 0.18 0.240 0.205 0.18 0.066" size="0.008" material="body_dark"/>
+      <geom class="visual" name="brace_r" type="capsule" fromto="-0.22 -0.18 0.240 0.205 -0.18 0.066" size="0.008" material="body_dark"/>
       <!-- anodised frame: 0.91 x 1.01 m outer -->
-      <geom name="pv_frame" type="box" size="0.455 0.505 0.010" pos="0 0 0.105"
+      <geom name="pv_frame" type="box" size="0.455 0.505 0.010" pos="-0.0045 0 0.200"
+            quat="0.984808 0 0.173648 0"
             material="pv_frame" mass="2.5" friction="0.5 0.005 0.0001"/>
       <!-- laminate: 0.89 x 0.99 m of dark blue-black cell glass = the 0.90 m^2 -->
-      <geom name="pv_glass" type="box" size="0.445 0.495 0.008" pos="0 0 0.123"
+      <geom name="pv_glass" type="box" size="0.445 0.495 0.008" pos="0.001656 0 0.216915"
+            quat="0.984808 0 0.173648 0"
             material="pv_glass" mass="6.5" friction="0.5 0.005 0.0001"/>
       <!-- two busbar strips so the panel reads as cells, not a black slab -->
-      <geom class="visual" name="busbar_a" type="box" size="0.445 0.004 0.0085" pos="0 0.165 0.1235" material="pv_frame"/>
-      <geom class="visual" name="busbar_b" type="box" size="0.445 0.004 0.0085" pos="0 -0.165 0.1235" material="pv_frame"/>
+      <geom class="visual" name="busbar_a" type="box" size="0.445 0.004 0.0085" pos="0.001827 0.165 0.217384"
+            quat="0.984808 0 0.173648 0" material="pv_frame"/>
+      <geom class="visual" name="busbar_b" type="box" size="0.445 0.004 0.0085" pos="0.001827 -0.165 0.217384"
+            quat="0.984808 0 0.173648 0" material="pv_frame"/>
 
       <!-- ---- BATTERY: NOT HERE ANY MORE ----
            The pack used to be three geoms of this body. It is now its own body
@@ -371,17 +414,20 @@
            be able to take the pack off. See the PACK block below. -->
 
       <!-- 7. SITES -->
-      <!-- panel_normal: on the glass, +Z of this site IS the panel normal.
+      <!-- panel_normal: on the glass, +Z of this site IS the panel normal,
+           (sin20, 0, cos20) in the chassis frame since the 20 deg tilt.
            Drawn as a visible 0.10 m spike so the hero shot shows the aim axis.
-           Sun exposure later = dot(site z-axis, sun direction), and because the
-           panel is bolted flat, that dot product is a pure function of body
-           yaw and the sun vector. Sensor "panel_normal_world" reads it out. -->
+           Sun exposure = max(0, dot(site z-axis, sun direction)), and because the
+           panel is bolted at a fixed tilt, on level ground that dot product is a
+           pure function of body yaw and the sun vector: facing the sun's azimuth
+           maximises it. Sensor "panel_normal_world" reads it out. -->
       <!-- NOTE: declared with an EXPLICIT zaxis, not fromto. A fromto-built
            cylinder site compiled here with its frame Z pointing DOWN, which
            silently negated dot(site_z, sun) - i.e. every exposure reading would
-           have come out backwards. Verified: this form gives world +Z = (0,0,1)
-           with the rover upright. Do not "simplify" it back to fromto. -->
-      <site name="panel_normal" type="cylinder" pos="0 0 0.181" zaxis="0 0 1"
+           have come out backwards. Verified: this form gives world +Z =
+           (0.342, 0, 0.940) with the rover upright at yaw 0. Do not "simplify"
+           it back to fromto. -->
+      <site name="panel_normal" type="cylinder" pos="0.021494 0 0.271417" zaxis="0.342020 0 0.939693"
             size="0.008 0.05" material="site_hi" group="1"/>
       <!-- battery_mount: on the UNDERSIDE face of the pack, z-axis pointing
            DOWN at the dock. Frame is (x fwd, y right, z down) - a dock driving
@@ -493,7 +539,7 @@
     <!-- straight side elevation: wheelbase, panel overhang and the slung battery
          in one silhouette. Camera height = CoG height, so the picture literally
          shows the argument about where the mass sits. -->
-    <camera name="side" pos="0.0 -2.45 0.19" mode="targetbody" target="chassis" fovy="38"/>
+    <camera name="side" pos="0.0 -2.45 0.215" mode="targetbody" target="chassis" fovy="38"/>
     <!-- low front three-quarter, "hero rising" angle for the video opener -->
     <camera name="hero_low" pos="1.75 -0.95 0.28" mode="targetbody" target="chassis" fovy="45"/>
     <!-- plan view for panel-aim / lane-coverage overlays -->

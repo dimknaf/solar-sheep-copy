@@ -40,15 +40,17 @@
       <geom class="visual" name="axle_fr" type="capsule" fromto="0.15 -0.18 -0.085 0.15 -0.37 -0.085" size="0.018" material="body_dark" />
       <geom class="visual" name="axle_rl" type="capsule" fromto="-0.15 0.18 -0.085 -0.15 0.37 -0.085" size="0.018" material="body_dark" />
       <geom class="visual" name="axle_rr" type="capsule" fromto="-0.15 -0.18 -0.085 -0.15 -0.37 -0.085" size="0.018" material="body_dark" />
-      <geom class="visual" name="post_fl" type="cylinder" fromto="0.22 0.18 0.058 0.22 0.18 0.096" size="0.013" material="body_dark" />
-      <geom class="visual" name="post_fr" type="cylinder" fromto="0.22 -0.18 0.058 0.22 -0.18 0.096" size="0.013" material="body_dark" />
-      <geom class="visual" name="post_rl" type="cylinder" fromto="-0.22 0.18 0.058 -0.22 0.18 0.096" size="0.013" material="body_dark" />
-      <geom class="visual" name="post_rr" type="cylinder" fromto="-0.22 -0.18 0.058 -0.22 -0.18 0.096" size="0.013" material="body_dark" />
-      <geom name="pv_frame" type="box" size="0.455 0.505 0.010" pos="0 0 0.105" material="pv_frame" mass="2.5" friction="0.5 0.005 0.0001" />
-      <geom name="pv_glass" type="box" size="0.445 0.495 0.008" pos="0 0 0.123" material="pv_glass" mass="6.5" friction="0.5 0.005 0.0001" />
-      <geom class="visual" name="busbar_a" type="box" size="0.445 0.004 0.0085" pos="0 0.165 0.1235" material="pv_frame" />
-      <geom class="visual" name="busbar_b" type="box" size="0.445 0.004 0.0085" pos="0 -0.165 0.1235" material="pv_frame" />
-      <site name="panel_normal" type="cylinder" pos="0 0 0.181" zaxis="0 0 1" size="0.008 0.05" material="site_hi" group="1" />
+      <geom class="visual" name="post_fl" type="cylinder" fromto="0.22 0.18 0.058 0.22 0.18 0.113" size="0.013" material="body_dark" />
+      <geom class="visual" name="post_fr" type="cylinder" fromto="0.22 -0.18 0.058 0.22 -0.18 0.113" size="0.013" material="body_dark" />
+      <geom class="visual" name="post_rl" type="cylinder" fromto="-0.22 0.18 0.058 -0.22 0.18 0.273" size="0.013" material="body_dark" />
+      <geom class="visual" name="post_rr" type="cylinder" fromto="-0.22 -0.18 0.058 -0.22 -0.18 0.273" size="0.013" material="body_dark" />
+      <geom class="visual" name="brace_l" type="capsule" fromto="-0.22 0.18 0.240 0.205 0.18 0.066" size="0.008" material="body_dark" />
+      <geom class="visual" name="brace_r" type="capsule" fromto="-0.22 -0.18 0.240 0.205 -0.18 0.066" size="0.008" material="body_dark" />
+      <geom name="pv_frame" type="box" size="0.455 0.505 0.010" pos="-0.0045 0 0.200" quat="0.984808 0 0.173648 0" material="pv_frame" mass="2.5" friction="0.5 0.005 0.0001" />
+      <geom name="pv_glass" type="box" size="0.445 0.495 0.008" pos="0.001656 0 0.216915" quat="0.984808 0 0.173648 0" material="pv_glass" mass="6.5" friction="0.5 0.005 0.0001" />
+      <geom class="visual" name="busbar_a" type="box" size="0.445 0.004 0.0085" pos="0.001827 0.165 0.217384" quat="0.984808 0 0.173648 0" material="pv_frame" />
+      <geom class="visual" name="busbar_b" type="box" size="0.445 0.004 0.0085" pos="0.001827 -0.165 0.217384" quat="0.984808 0 0.173648 0" material="pv_frame" />
+      <site name="panel_normal" type="cylinder" pos="0.021494 0 0.271417" zaxis="0.342020 0 0.939693" size="0.008 0.05" material="site_hi" group="1" />
       <site name="battery_mount" pos="0 0 -0.115" zaxis="0 0 -1" type="box" size="0.045 0.085 0.006" material="site_lo" group="1" />
       <site name="imu" pos="0 0 0" size="0.012" group="4" />
       <body name="wheel_fl_body" pos="0.15 0.40 -0.085">
