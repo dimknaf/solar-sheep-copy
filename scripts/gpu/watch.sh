@@ -2,8 +2,10 @@
 # THE ONE WAY IN: an outbound SSH tunnel from the laptop (run in WSL) to the GPU box.
 #   bash scripts/gpu/watch.sh        # keep it running; Ctrl+C closes it
 # Then, in the laptop's browser:
-#   http://localhost:8080   the live 3D Omniverse world (Isaac Lab Viser visualizer)
-#   http://localhost:6006   training charts (TensorBoard)
+#   http://localhost:18080   the live 3D Omniverse world (Isaac Lab Viser visualizer; box port 8080)
+#   http://localhost:16006   training charts (TensorBoard; box port 6006)
+# Laptop-side ports are 18080/16006 because 8080 is already taken by a local database on the
+# owner's laptop; override with LOCAL_VIEW_PORT / LOCAL_TB_PORT if those are ever busy.
 #
 # Safety: both ends bind 127.0.0.1 only. The laptop opens no listening port to any network
 # (WSL forwards these to Windows loopback only); the box's services also listen on its

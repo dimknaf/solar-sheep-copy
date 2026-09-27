@@ -120,7 +120,7 @@ table {{ border-collapse:collapse; width:100%; max-width:700px; }} td,th {{ bord
 </style></head><body><main>
 <h1>Solar Sheep — the rover in Omniverse</h1>
 <p class="muted">Local page, refreshed from the GPU box every few minutes. Updated {esc(time.strftime("%d %b %Y %H:%M"))}.</p>
-<div class="live"><a href="http://localhost:8080">Live 3D world (Viser)</a><a href="http://localhost:6006">Training charts (TensorBoard)</a></div>
+<div class="live"><a href="http://localhost:18080">Live 3D world (Viser)</a><a href="http://localhost:16006">Training charts (TensorBoard)</a></div>
 <p class="muted">The live links work only while the secure tunnel (scripts/gpu/watch.sh) is running.</p>
 <h2>Milestones</h2>
 {timeline}

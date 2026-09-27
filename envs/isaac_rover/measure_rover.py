@@ -6,7 +6,7 @@ Runs INSIDE NVIDIA's Isaac Lab container on the GPU box, from the box:
     bash scripts/gpu/isaac.sh envs/isaac_rover/measure_rover.py --usd $U                    # PhysX 240 Hz
     bash scripts/gpu/isaac.sh envs/isaac_rover/measure_rover.py --usd $U --hz 480           # timestep check
     bash scripts/gpu/isaac.sh envs/isaac_rover/measure_rover.py --usd $U --physics mjwarp   # MuJoCo-Warp check
-    add --realtime --loops 5 to watch it at real speed in the live view (http://localhost:8080 via watch.sh)
+    add --realtime --loops 5 to watch it at real speed in the live view (http://localhost:18080 on the laptop via watch.sh)
 
 Open loop, no policy: this measures the machine, not a controller. Every lane is a separate
 copy of the rover in one scene, on the ground or on its own ramp:
