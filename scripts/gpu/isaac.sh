@@ -8,7 +8,8 @@
 # mounted at the same path). The image has no uv: Isaac Lab lives in Isaac Sim's bundled
 # Python 3.12, so the environment is set up the way /isaac-sim/python.sh does it.
 # Running the container accepts NVIDIA's Isaac Sim / Omniverse licence terms (ACCEPT_EULA=Y);
-# telemetry consent is not given.
+# telemetry consent is not given. HEADLESS=1 keeps an explicit Kit visualizer (used for video
+# clips) off-screen. Services it starts (Viser) must bind 127.0.0.1 - see envs/isaac_rover.
 
 set -euo pipefail
 IMAGE="${IMAGE:-solar/isaac-lab:3.0.0-rc1-video}"   # built by smoke.sh from scripts/gpu/Dockerfile
@@ -17,7 +18,7 @@ C=/data/isaac-sim
 [ $# -ge 1 ] || { echo "usage: $0 <script.py relative to the repo> [args...]" >&2; exit 2; }
 SCRIPT="$1"; shift
 
-exec docker run --rm --gpus all --network=host -e ACCEPT_EULA=Y --entrypoint bash \
+exec docker run --rm --gpus all --network=host -e ACCEPT_EULA=Y -e HEADLESS=1 --entrypoint bash \
   -v "$C/cache/kit:/isaac-sim/kit/cache:rw" -v "$C/cache/ov:/root/.cache/ov:rw" \
   -v "$C/cache/pip:/root/.cache/pip:rw" -v "$C/cache/glcache:/root/.cache/nvidia/GLCache:rw" \
   -v "$C/cache/computecache:/root/.nv/ComputeCache:rw" -v "$C/logs:/root/.nvidia-omniverse/logs:rw" \

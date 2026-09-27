@@ -13,6 +13,11 @@
 # operation result; on NotEnoughResources delete at once and move region, never retry-loop.
 # IDs come from the environment or .env (NEBIUS_TENANT_ID), never from this file.
 # The boot disk is managed (deleted with the VM); the data disk "solar-data" is kept.
+#
+# Network exposure (owner: "do not open any ports"): the VM gets the security group
+# "solar-ssh" - inbound TCP 22 from this laptop's public IP only, nothing else - instead of the
+# project's default group (which allows all inbound). cloud-init adds the same rule as a host
+# firewall. Everything else is reached through the SSH tunnel (scripts/gpu/watch.sh).
 
 set -euo pipefail
 export PATH="$PATH:$HOME/.nebius/bin"
@@ -29,6 +34,7 @@ DATA_DISK="${KEEP_DISK:-solar-data}"
 DATA_GIB="${DATA_GIB:-200}"
 PREEMPTIBLE="${PREEMPTIBLE:-0}"
 KEY="${SSH_KEY:-$HOME/.ssh/solar_nebius}"
+SG_NAME="solar-ssh"
 : "${NEBIUS_TENANT_ID:?Set NEBIUS_TENANT_ID in the environment or .env}"
 
 json() { python3 -c "import json,sys; d=json.load(sys.stdin); $1"; }
@@ -52,6 +58,12 @@ m = [i for i in d.get('items', []) if i.get('status', {}).get('region') == '$REG
 if not m: sys.exit('no project in region $REGION')
 print(m[0]['metadata']['id'])")
 SUBNET=$(nebius vpc subnet list --parent-id "$PROJECT" --format json | json "print(d['items'][0]['metadata']['id'])")
+NETWORK=$(nebius vpc subnet get --id "$SUBNET" --format json | json "print(d['spec']['network_id'])")
+ADMIN_IP="${ADMIN_IP:-$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')}"
+[[ "$ADMIN_IP" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || { echo "could not determine this laptop's public IPv4" >&2; exit 1; }
+ADMIN_CIDR="$ADMIN_IP/32"
+SG=$(nebius vpc security-group list --parent-id "$PROJECT" --format json | json "
+print(next((i['metadata']['id'] for i in d.get('items', []) if i['metadata'].get('name') == '$SG_NAME'), ''))")
 DISK_ID=$(nebius compute disk list --parent-id "$PROJECT" --format json | json "
 print(next((i['metadata']['id'] for i in d.get('items', []) if i['metadata'].get('name') == '$DATA_DISK'), ''))")
 EXISTING=$(nebius compute instance list --parent-id "$PROJECT" --format json | json "
@@ -63,6 +75,7 @@ echo "  instance   $VM_NAME  $PLATFORM $PRESET  $([ "$PREEMPTIBLE" = 1 ] && echo
 echo "  boot disk  ${BOOT_GIB} GiB network_ssd from $IMAGE_FAMILY (deleted with the VM)"
 echo "  data disk  $DATA_DISK ${DATA_GIB} GiB $([ -n "$DISK_ID" ] && echo '(exists, reattached)' || echo '(will be created, kept on teardown)')"
 echo "  ssh key    $KEY"
+echo "  firewall   security group $SG_NAME $([ -n "$SG" ] && echo '(exists)' || echo '(will be created)'): inbound TCP 22 from this laptop only, + host ufw"
 [ -n "$EXISTING" ] && echo "  NOTE: instances already in this project: $EXISTING"
 
 if [ "${1:-}" != "--yes" ]; then
@@ -78,7 +91,25 @@ if [ -z "$DISK_ID" ]; then
     --size-gibibytes "$DATA_GIB" --type network_ssd --format json | json "print(d['metadata']['id'])")
 fi
 
-USER_DATA=$(sed "s|__SSH_PUBKEY__|$(cat "$KEY.pub")|" scripts/gpu/cloud-init.yaml)
+if [ -z "$SG" ]; then
+  echo "=== creating security group $SG_NAME ==="
+  SG=$(nebius vpc security-group create --parent-id "$PROJECT" --network-id "$NETWORK" --name "$SG_NAME"     --format json | json "print(d['metadata']['id'])")
+fi
+# (Re)write the rules every time: the laptop's public IP can change between sessions.
+for rule in $(nebius vpc security-rule list --parent-id "$SG" --format json | json "
+[print(i['metadata']['id']) for i in d.get('items', [])]"); do
+  nebius vpc security-rule delete --id "$rule" >/dev/null
+done
+nebius vpc security-rule create --parent-id "$SG" --name ssh-from-laptop --access allow --protocol tcp   --ingress-destination-ports 22 --ingress-source-cidrs "$ADMIN_CIDR" >/dev/null
+nebius vpc security-rule create --parent-id "$SG" --name egress-all --access allow --protocol any   --egress-destination-cidrs 0.0.0.0/0 >/dev/null
+echo "=== $SG_NAME rules ==="
+nebius vpc security-rule list --parent-id "$SG" --format json | json "
+for i in d.get('items', []):
+    sp = i.get('spec', {})
+    print('  ', i['metadata'].get('name'), sp.get('access'), sp.get('protocol'),
+          'ingress' if sp.get('ingress') else 'egress', 'ports', (sp.get('ingress') or sp.get('egress') or {}).get('destination_ports'))"
+
+USER_DATA=$(sed -e "s|__SSH_PUBKEY__|$(cat "$KEY.pub")|" -e "s|__ADMIN_CIDR__|$ADMIN_CIDR|g" scripts/gpu/cloud-init.yaml)
 PREEMPT_ARGS=()
 [ "$PREEMPTIBLE" = 1 ] && PREEMPT_ARGS=(--preemptible-on-preemption STOP --preemptible-priority 1)
 
@@ -90,7 +121,7 @@ CREATE_OUT=$(nebius compute instance create --async --format json --parent-id "$
   --boot-disk-managed-disk-size-gibibytes "$BOOT_GIB" \
   --boot-disk-managed-disk-source-image-family-image-family "$IMAGE_FAMILY" \
   --secondary-disks "[{\"attach_mode\":\"read_write\",\"device_id\":\"solar-data\",\"existing_disk\":{\"id\":\"$DISK_ID\"}}]" \
-  --network-interfaces "[{\"name\":\"eth0\",\"subnet_id\":\"$SUBNET\",\"ip_address\":{},\"public_ip_address\":{}}]" \
+  --network-interfaces "[{\"name\":\"eth0\",\"subnet_id\":\"$SUBNET\",\"ip_address\":{},\"public_ip_address\":{},\"security_groups\":[{\"id\":\"$SG\"}]}]" \
   --cloud-init-user-data "$USER_DATA" "${PREEMPT_ARGS[@]}" 2>&1) || { echo "$CREATE_OUT"; exit 1; }
 # --async does not print JSON despite --format json (seen 25 Sep, CLI 0.12.277): take the id from the text.
 OP=$(grep -oE 'computeoperation-[a-z0-9]+' <<< "$CREATE_OUT" | head -1)
@@ -112,9 +143,10 @@ fi
 IP=$(nebius compute instance get --id "$INST" --format json | json "
 nics = d.get('status', {}).get('network_interfaces', [])
 print(nics[0].get('public_ip_address', {}).get('address', '').split('/')[0] if nics else '')")
+ssh-keygen -R "$IP" >/dev/null 2>&1 || true      # a new VM may reuse an old IP: forget its old host key
+mkdir -p "$HOME/.solar"; echo "$IP" > "$HOME/.solar/vm_ip"    # local only, read by watch.sh / pull_runs.sh
 echo
 echo "=== UP: $VM_NAME in $REGION ==="
-echo "  ssh -i $KEY solar@$IP"
+echo "  ssh -i $KEY -o StrictHostKeyChecking=accept-new solar@$IP     (first time; strict afterwards)"
 echo "  first-boot setup log: ssh ... 'tail -f /var/log/solar-setup.log'  (done: /var/lib/solar-setup.done)"
-echo "  then: scp scripts/gpu/smoke.sh solar@$IP: && ssh ... 'bash smoke.sh'"
 echo "  WHEN FINISHED: bash scripts/teardown.sh --yes"

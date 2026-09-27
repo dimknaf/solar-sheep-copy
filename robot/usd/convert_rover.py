@@ -2,7 +2,7 @@
 
 Runs INSIDE NVIDIA's Isaac Lab container on the GPU box (it needs Isaac Sim), from the box:
 
-    bash scripts/gpu/isaac.sh robot/usd/convert_rover.py            # -> /data/runs/usd
+    bash scripts/gpu/isaac.sh robot/usd/convert_rover.py   # -> /data/runs/usd/<name>/<name>/<name>.usda
 
 Inputs are the two rover-only MJCFs from robot/make_import_variants.py:
     robot/import/rover_train.xml  -> <out>/rover_train/rover_train.usda  (one 29.4 kg articulation)
@@ -47,13 +47,22 @@ def report(usd_path: str) -> None:
     roots = [p for p in stage.Traverse() if p.HasAPI(UsdPhysics.ArticulationRootAPI)]
     print(f"  articulation roots: {[str(p.GetPath()) for p in roots]}")
 
+    # The importer authors mass on each collider prim (payloads/Physics/physics.usda), not on the
+    # body: a body's mass is the sum over the colliders beneath it (nested bodies excluded).
     total = 0.0
-    for p in stage.Traverse():
-        if p.HasAPI(UsdPhysics.RigidBodyAPI):
-            m = UsdPhysics.MassAPI(p).GetMassAttr().Get() if p.HasAPI(UsdPhysics.MassAPI) else None
-            total += m or 0.0
-            print(f"  body   {p.GetName():18s} mass={m}")
-    print(f"  total mass: {total:.3f} kg   (SPEC: 29.4 for rover_train)")
+    bodies = [p for p in stage.Traverse() if p.HasAPI(UsdPhysics.RigidBodyAPI)]
+    for b in bodies:
+        m = 0.0
+        it = iter(Usd.PrimRange(b))
+        for c in it:
+            if c != b and c.HasAPI(UsdPhysics.RigidBodyAPI):
+                it.PruneChildren()          # a nested body (e.g. a wheel) owns its own colliders
+                continue
+            if c.HasAPI(UsdPhysics.MassAPI) and c.HasAPI(UsdPhysics.CollisionAPI):
+                m += UsdPhysics.MassAPI(c).GetMassAttr().Get() or 0.0
+        total += m
+        print(f"  body   {b.GetName():18s} mass={m:.3f} kg (sum of its colliders)")
+    print(f"  total mass: {total:.3f} kg   (SPEC: 29.4)")
 
     for p in stage.Traverse():
         if not p.IsA(UsdPhysics.Joint):

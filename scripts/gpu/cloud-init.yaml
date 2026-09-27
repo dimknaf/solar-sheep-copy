@@ -3,6 +3,16 @@
 # scripts/gpu/up.sh substitutes __SSH_PUBKEY__ and passes this as --cloud-init-user-data.
 # Progress: /var/log/solar-setup.log on the box; done when /var/lib/solar-setup.done exists.
 # (Do not poll with `cloud-init status --wait` - it hangs on some CUDA 13 images.)
+#
+# Safety (owner: "do not open any ports or expose us to the internet"):
+#   - SSH is key-only, no root login; the host firewall denies ALL inbound except TCP 22 from
+#     __ADMIN_CIDR__ (the laptop's public IP, filled in by up.sh). The Nebius security group
+#     "solar-ssh" enforces the same rule in front of the VM.
+#   - Every service on the box (TensorBoard, Viser) binds 127.0.0.1 and is reached only
+#     through the SSH tunnel.
+#   - Cost failsafe: the box powers itself off after 8 hours (a stopped VM stops GPU billing).
+ssh_pwauth: false
+disable_root: true
 users:
   - name: solar
     sudo: ALL=(ALL) NOPASSWD:ALL
@@ -86,5 +96,21 @@ write_files:
 
       touch /var/lib/solar-setup.done
 
+  - path: /usr/local/sbin/solar-lockdown.sh
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      # Runs first, before the long setup: close every inbound port except SSH from the laptop.
+      set -euxo pipefail
+      command -v ufw >/dev/null || { apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q ufw; }
+      ufw --force reset
+      ufw default deny incoming
+      ufw default allow outgoing
+      ufw allow from __ADMIN_CIDR__ to any port 22 proto tcp
+      ufw --force enable
+      ufw status verbose
+      shutdown -h +480 "Solar Sheep cost failsafe: 8-hour session cap"
+
 runcmd:
+  - [bash, -c, "/usr/local/sbin/solar-lockdown.sh > /var/log/solar-lockdown.log 2>&1"]
   - [bash, -c, "/usr/local/sbin/solar-setup.sh > /var/log/solar-setup.log 2>&1"]
