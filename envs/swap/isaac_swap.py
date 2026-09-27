@@ -180,6 +180,12 @@ class SwapScene:
         self.wheel_body_ids, self.wheel_body_names = self.rover.find_bodies("wheel_.*")
         self.cmd = [0.0, 0.0, 0.0, 0.0]
         self._place_rover(START_X)
+        # sim.reset()'s warm-up step runs with the primed spare latch still closed, which yanks the spare
+        # from empty_ready toward the rover's bay (box run 27 Sep: it landed in the rover's path). Put it
+        # back on its station at rest, as _place_rover does for the rover and its pack.
+        self.spare.write_root_pose_to_sim_index(
+            root_pose=torch.tensor([[rp[0], rp[1], rp[2] + 0.0005, *rq]], device=self.dev))
+        self.spare.write_root_velocity_to_sim_index(root_velocity=torch.zeros(1, 6, device=self.dev))
 
         self.hw = IsaacDockHardware(dock=self.dock, rovers=self.rover, packs=[self.pack, self.spare],
                                     bank=self.bank, stations=st, on_event=self._hw_event)
