@@ -1,7 +1,7 @@
 # START HERE — Solar Sheep → Physical AI
 
 **Nebius x NVIDIA Global AI Hackathon · Physical AI track**
-Branch: `real-sim` · read this before touching anything.
+Branch: `real-sim-5` (work) · read this before touching anything.
 
 > **Updated 25 Sep 2026.** The route to the real simulation (Omniverse on a Nebius GPU) and why:
 > [docs/decisions.md](docs/decisions.md). Which skill to load for each step:
@@ -19,6 +19,55 @@ DEADLINE   30 Oct 2026, 10:00 PDT = 17:00 GMT
 | **Dimitris** | the rover + its locomotion policy | `robot/SPEC.md` |
 | **B** | the battery-swap dock | `envs/swap/SPEC.md` |
 | **C** | cloud GPU, the world, the orchestrator | GPU up + `scene/SPEC.md` |
+
+---
+
+## Resume here — state at the end of 27 Sep 2026
+
+**Nothing is running.** The GPU VM was deleted at 17:55 UTC. The only thing still billed is the
+`solar-data` disk: 200 GiB network SSD, about $0.47/day, kept on purpose. Token Factory charges
+per call only. Check the credit balance at console.nebius.com → Billing.
+
+**Checkpoint branches** are frozen snapshots; work continues on the next number:
+
+| Branch | Secured |
+|---|---|
+| `real-sim-1` | GPU box + localhost-only viewers, rover matches `robot/SPEC.md` under PhysX, 0.30 m wheelbase, flat traverse policy |
+| `real-sim-2` | rough-terrain policy (2.22 targets/episode), 20° tilted panel (D13), fleet brain `orchestrator/` |
+| `real-sim-3` | battery swap done physically in Omniverse, all assertions pass (D14) |
+| `real-sim-4` | the whole factory in one run, Nemotron dispatching, all checks pass (D15) |
+| `real-sim-5` | work branch |
+
+**Where things live:**
+- **On the data disk** (mounted at `/data` on the next VM):
+  - rough policy `/data/runs/rsl_rl/solar_sheep_traverse/2026-09-27_11-19-43/exported/policy.pt`;
+  - flat policy `/data/runs/rsl_rl/solar_sheep_traverse_flat/2026-09-27_09-39-17/`;
+  - USDs `/data/runs/usd/tilt20/{rover_train,rover_swap,dock}/`;
+  - the factory runs `/data/runs/factory/`;
+  - the cached Isaac Lab image.
+- **On the laptop only** (gitignored): `runs/gpu/`, which holds every clip, the metrics and
+  `runs/gpu/progress.html`. The final clip is `runs/gpu/runs/factory/nemo180b/factory.mp4`.
+
+**Resume** (in WSL `~/solar-sheep`; each step's script explains itself):
+
+```bash
+nebius iam whoami --no-browser                  # log in first if it has expired
+git fetch && git checkout real-sim-5
+bash scripts/gpu/up.sh --yes                    # reattaches solar-data; PREEMPTIBLE=1 is ~half price
+ENV_FILE=/mnt/c/Users/dimkn/source/repos/random/nebius-hackathon/.env bash scripts/gpu/put_tf_key.sh
+bash scripts/gpu/watch.sh &                     # live view localhost:18080, charts localhost:16006
+bash scripts/gpu/pull_runs.sh --loop &          # clips + metrics to runs/gpu/ every 5 min
+# on the box (~/solar-sheep, same branch):
+SOLAR_TF_MODEL=nvidia/Nemotron-3_5-Lightning bash scripts/gpu/isaac.sh envs/isaac_rover/factory.py --llm --seconds 180
+bash scripts/teardown.sh --yes                  # ALWAYS at the end: deletes the VM, keeps solar-data
+```
+
+**Speed:** the factory renders a 1080p RTX frame every two control steps, so it runs at about a
+tenth of real time. Test with `--no-video` or a shorter `--seconds`, and record 1080p only for
+the final run.
+
+**Next:** rovers that deconflict (lanes or perception; they pass through each other today),
+policy-driven berthing, Tavily weather into the prompt, then the video (freeze 27 Oct).
 
 ---
 
