@@ -5,6 +5,26 @@ Details of every skill mentioned: [docs/skills.md](skills.md).
 
 ---
 
+## D14 · 27 Sep 2026 — Battery swap in Omniverse: the latch is a real joint, toggled while PhysX runs
+- **Mechanism:** the importer turns MuJoCo's `pack_latch` weld into a USD FixedJoint excluded from
+  the articulation. Setting `physics:jointEnabled` on it while the simulation plays releases or
+  latches the pack - the exact equivalent of MuJoCo `eq_active`. Verified on the GPU pipeline
+  (`envs/swap/latch_spike.py`: pack drops 6.0 cm on release, rover leaves it, re-latches to 1 µm).
+  No SurfaceGripper (CPU-only) needed. The `--device cpu` pipeline crashed silently; we run on GPU.
+- **Same controller:** `swap_battery.py` and its six-method `DockHardware` Protocol are unchanged;
+  `envs/swap/isaac_hardware.py` is the MuJoCo adapter with the engine touch-points swapped.
+  `envs/swap/isaac_swap.py` passes swap_demo's assertions 2-8 in Omniverse (berth 11 mm, lift
+  0.060 m, old pack at full_stow, fresh pack 0.00 mm from its bay, rover drives off with it).
+- **Dock must be a truly fixed base:** the importer's fix_base joint links the asset's root Xform
+  (not a body) to `dock_base`, which PhysX parsed as a floating articulation; ground contact lifted
+  the dock 6 cm (a kerb the rover could not climb). `anchor_dock_to_world()` makes it a one-body
+  world joint (`SetTargets([])` over the payload's list-op) and hands it to Isaac Lab's
+  `fix_articulation_root` (moves the root API off the root body, as `fix_root_link` does) - one
+  world joint, so the Viser viewer also builds.
+- **Scripted parts, stated plainly:** the deck shuttles (stow / offer) are the plant's conveyor and
+  move packs by pose writes, as MuJoCo's PINNED mode did. The lift, the latches, the rover and the
+  pack contacts are physics.
+
 ## D13 · 27 Sep 2026 — Solar panel: fixed 20° tilt toward the nose; the rover yaws to face the sun
 - **Owner's choice** (27 Sep) among flat / fixed tilt / tilt motor. A flat panel made heading
   irrelevant to harvest; with a fixed tilt, facing the sun is real, measurable behaviour, and the
@@ -125,8 +145,8 @@ Details of every skill mentioned: [docs/skills.md](skills.md).
 
 ## Open (owner)
 1. ~~Solar panel: flat, fixed tilt, or a tilt motor?~~ Decided 27 Sep: fixed 20° tilt (D13).
-2. **Battery swap:** proposed — train the approach and berthing; lift and latch
-   mechanical and physics-driven, never teleported.
+2. ~~Battery swap~~ Done 27 Sep (D14): lift and latch physics-driven in Omniverse; berthing is a
+   P controller (the trained policy does the coarse drive).
 3. **Real hardware before 30 Oct:** proposed no; ship the exported policy + I/O
    contract, the PhysX↔MuJoCo-Warp results and a system-identification procedure.
 4. **GPU spend:** Token Factory key, credit balance, CLI re-login, preemptible vs
